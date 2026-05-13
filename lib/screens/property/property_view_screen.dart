@@ -142,10 +142,6 @@ class PropertyViewScreen extends StatelessWidget {
           );
         },
       ),
-      floatingActionButton: FloatingActionButton(
-        onPressed: () => _goToForm(context, null),
-        child: const Icon(Icons.add),
-      ),
     );
   }
 
