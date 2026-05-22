@@ -38,6 +38,17 @@ class OccurrenceRepository {
             .toList());
   }
 
+  /// Stream em tempo real das ocorrências de um usuário específico.
+  Stream<List<OccurrenceModel>> watchByUser(String userId) {
+    return _col
+        .where('reportedBy', isEqualTo: userId)
+        .orderBy('timestamp', descending: true)
+        .snapshots()
+        .map((snap) => snap.docs
+            .map((d) => OccurrenceModel.fromMap(d.data(), d.id))
+            .toList());
+  }
+
   /// Atualiza o diagnóstico de IA de uma ocorrência existente.
   Future<void> updateDiagnosis(
     String occurrenceId,

@@ -43,7 +43,6 @@ Regras:
     dev.log('[GeminiAiService] iniciando análise de imagem');
 
     final uri = Uri.parse('$_endpoint?key=$_apiKey');
-
     final requestBody = jsonEncode({
       'contents': [
         {
@@ -73,13 +72,34 @@ Regras:
         )
         .timeout(const Duration(seconds: AppConstants.aiTimeoutSeconds));
 
-    if (response.statusCode != 200) {
-      dev.log('[GeminiAiService] erro HTTP ${response.statusCode}: ${response.body}');
-      throw Exception('Gemini API retornou ${response.statusCode}');
+    if (response.statusCode == 200) {
+      dev.log('[GeminiAiService] resposta recebida, processando');
+      return _parseResponse(response.body);
     }
 
-    dev.log('[GeminiAiService] resposta recebida, processando');
-    return _parseResponse(response.body);
+    if (response.statusCode == 429) {
+      final retryDelaySecs = _parseRetryDelay(response.body);
+      dev.log('[GeminiAiService] 429 — retryDelay: ${retryDelaySecs}s');
+
+      // Só tenta novamente se o delay sugerido for curto (limite de RPM).
+      // Quota diária esgotada tem delay longo — falha imediatamente.
+      if (retryDelaySecs != null && retryDelaySecs <= 60) {
+        dev.log('[GeminiAiService] aguardando ${retryDelaySecs}s (sugerido pela API)');
+        await Future.delayed(Duration(seconds: retryDelaySecs));
+        final retry = await http
+            .post(uri, headers: {'Content-Type': 'application/json'}, body: requestBody)
+            .timeout(const Duration(seconds: AppConstants.aiTimeoutSeconds));
+        if (retry.statusCode == 200) {
+          dev.log('[GeminiAiService] retry bem-sucedido');
+          return _parseResponse(retry.body);
+        }
+      }
+
+      throw const AiRateLimitException();
+    }
+
+    dev.log('[GeminiAiService] erro HTTP ${response.statusCode} — body: ${response.body}');
+    throw Exception('Gemini API retornou ${response.statusCode}');
   }
 
   DiagnosisModel _parseResponse(String responseBody) {
@@ -132,6 +152,22 @@ Regras:
         analyzedAt: DateTime.now(),
       );
     }
+  }
+
+  // Extrai o retryDelay em segundos do corpo do erro 429 da Gemini API.
+  // Retorna null se não encontrar ou não conseguir parsear.
+  int? _parseRetryDelay(String body) {
+    try {
+      final json = jsonDecode(body) as Map<String, dynamic>;
+      final details = (json['error']?['details'] as List?) ?? [];
+      for (final detail in details) {
+        final delay = detail['retryDelay'] as String?;
+        if (delay != null) {
+          return int.tryParse(delay.replaceAll('s', '').trim());
+        }
+      }
+    } catch (_) {}
+    return null;
   }
 
   String _normalizeRiskLevel(dynamic raw) {

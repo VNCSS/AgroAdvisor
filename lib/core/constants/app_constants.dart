@@ -44,7 +44,7 @@ class AppConstants {
   /// ⚠️  SEGURANÇA: Em produção, mova esta chave para uma variável de ambiente
   /// (--dart-define=GEMINI_API_KEY=...) ou proxie via Cloud Function para que
   /// ela nunca fique exposta no binário do app.
-  static const String geminiApiKey = 'AIzaSyDm0fTbO7itpXai4vWX0aA_ESpP9C9mvp4';
+  static const String geminiApiKey = 'AIzaSyBHU1lj6zKoWek0hrmzz3XCr85RRvgN4Es';
 
   /// Endpoint do Gemini 2.0 Flash para análise de imagens.
   static const String geminiEndpoint =

@@ -4,6 +4,7 @@ import '../features/occurrence/domain/diagnosis_model.dart';
 import 'ai_service.dart';
 import 'database_service.dart';
 
+
 /// Orquestra a análise de IA e a persistência do diagnóstico no Firestore.
 ///
 /// Depende de AiService (injetado) — fácil de testar com um mock.
@@ -42,9 +43,13 @@ class DiagnosisService {
       dev.log('[DiagnosisService] diagnóstico salvo no Firestore');
 
       return diagnosis;
+    } on AiRateLimitException catch (e) {
+      dev.log('[DiagnosisService] limite de requisições da API atingido');
+      onError?.call(e.toString());
+      return null;
     } catch (e, stack) {
       dev.log('[DiagnosisService] erro na análise', error: e, stackTrace: stack);
-      onError?.call(e.toString());
+      onError?.call('Erro inesperado na análise. Tente novamente.');
       return null;
     }
   }

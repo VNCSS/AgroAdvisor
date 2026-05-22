@@ -8,12 +8,9 @@ import 'services/diagnosis_service.dart';
 import 'services/gemini_ai_service.dart';
 import 'services/notification_service.dart';
 import 'features/auth/presentation/screens/login_screen.dart';
-import 'features/property/presentation/screens/property_list_screen.dart';
+import 'features/main_shell.dart';
 
-/// Raiz do aplicativo: configura providers e tema, e exibe o AuthWrapper.
-///
-/// Separado de main.dart para que este cuide apenas do bootstrap
-/// (Firebase init, runApp) e app.dart cuide da configuração do app.
+/// Raiz do aplicativo: configura providers, tema e AuthWrapper.
 class AgroAdvisorApp extends StatelessWidget {
   const AgroAdvisorApp({super.key});
 
@@ -21,14 +18,9 @@ class AgroAdvisorApp extends StatelessWidget {
   Widget build(BuildContext context) {
     return MultiProvider(
       providers: [
-        // Auth — ChangeNotifier reativo; controla o AuthWrapper
         ChangeNotifierProvider(create: (_) => AuthService()),
-
-        // Infraestrutura Firebase (singletons por sessão)
         Provider(create: (_) => DatabaseService()),
         Provider(create: (_) => NotificationService()),
-
-        // Diagnóstico de IA — troque GeminiAiService() para mudar de provedor
         Provider(
           create: (_) => DiagnosisService(
             aiService: GeminiAiService(),
@@ -46,7 +38,7 @@ class AgroAdvisorApp extends StatelessWidget {
   }
 }
 
-/// Observa o estado de autenticação e redireciona automaticamente.
+/// Observa o estado de autenticação e redireciona para o shell principal ou login.
 class AuthWrapper extends StatelessWidget {
   const AuthWrapper({super.key});
 
@@ -58,7 +50,7 @@ class AuthWrapper extends StatelessWidget {
       WidgetsBinding.instance.addPostFrameCallback((_) {
         context.read<NotificationService>().initialize(auth.currentUser!.uid);
       });
-      return const PropertyListScreen();
+      return const MainShell();
     }
 
     return const LoginScreen();

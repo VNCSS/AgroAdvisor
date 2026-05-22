@@ -1,10 +1,15 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
-import '../../../../services/auth_service.dart';
+import '../../../../core/theme/app_colors.dart';
+import '../../../../core/theme/app_text_styles.dart';
+import '../../../../core/theme/app_spacing.dart';
 import '../../../../core/widgets/primary_button.dart';
+import '../../../../services/auth_service.dart';
 import 'signup_screen.dart';
 
+/// Tela de login.
+/// Layout baseado no protótipo: fundo creme, logo + tagline, campos grandes, botão destacado.
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
 
@@ -14,16 +19,16 @@ class LoginScreen extends StatefulWidget {
 
 class _LoginScreenState extends State<LoginScreen> {
   final _formKey = GlobalKey<FormState>();
-  final _emailController = TextEditingController();
-  final _passwordController = TextEditingController();
+  final _emailCtrl = TextEditingController();
+  final _passCtrl = TextEditingController();
 
   bool _isLoading = false;
-  bool _obscurePassword = true;
+  bool _obscure = true;
 
   @override
   void dispose() {
-    _emailController.dispose();
-    _passwordController.dispose();
+    _emailCtrl.dispose();
+    _passCtrl.dispose();
     super.dispose();
   }
 
@@ -32,8 +37,8 @@ class _LoginScreenState extends State<LoginScreen> {
     setState(() => _isLoading = true);
 
     final error = await context.read<AuthService>().signIn(
-          email: _emailController.text,
-          password: _passwordController.text,
+          email: _emailCtrl.text.trim(),
+          password: _passCtrl.text,
         );
 
     if (!mounted) return;
@@ -41,97 +46,152 @@ class _LoginScreenState extends State<LoginScreen> {
 
     if (error != null) {
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(error), backgroundColor: Colors.red),
+        SnackBar(content: Text(error), backgroundColor: AppColors.error),
       );
     }
-    // Sucesso: AuthWrapper em app.dart redireciona automaticamente
+    // Sucesso: AuthWrapper redireciona automaticamente
   }
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-
     return Scaffold(
+      backgroundColor: AppColors.background,
       body: SafeArea(
-        child: Center(
-          child: SingleChildScrollView(
-            padding: const EdgeInsets.all(24),
-            child: Form(
-              key: _formKey,
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  Icon(Icons.agriculture, size: 80, color: theme.colorScheme.primary),
-                  const SizedBox(height: 8),
-                  Text(
-                    'AgroAdvisor',
-                    style: theme.textTheme.headlineMedium?.copyWith(
-                      color: theme.colorScheme.primary,
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
-                  const SizedBox(height: 4),
-                  Text(
-                    'Seu assistente inteligente no campo',
-                    style: theme.textTheme.bodyMedium?.copyWith(color: Colors.grey[600]),
-                  ),
-                  const SizedBox(height: 40),
+        child: SingleChildScrollView(
+          padding: const EdgeInsets.symmetric(
+            horizontal: AppSpacing.screenH,
+            vertical: AppSpacing.lg,
+          ),
+          child: Form(
+            key: _formKey,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const SizedBox(height: AppSpacing.xl),
 
-                  TextFormField(
-                    controller: _emailController,
-                    keyboardType: TextInputType.emailAddress,
-                    decoration: const InputDecoration(
-                      labelText: 'E-mail',
-                      prefixIcon: Icon(Icons.email_outlined),
-                      border: OutlineInputBorder(),
-                    ),
-                    validator: (v) {
-                      if (v == null || v.trim().isEmpty) return 'Informe seu e-mail';
-                      if (!v.contains('@')) return 'E-mail inválido';
-                      return null;
-                    },
-                  ),
-                  const SizedBox(height: 16),
-
-                  TextFormField(
-                    controller: _passwordController,
-                    obscureText: _obscurePassword,
-                    decoration: InputDecoration(
-                      labelText: 'Senha',
-                      prefixIcon: const Icon(Icons.lock_outlined),
-                      border: const OutlineInputBorder(),
-                      suffixIcon: IconButton(
-                        icon: Icon(
-                          _obscurePassword ? Icons.visibility_off : Icons.visibility,
-                        ),
-                        onPressed: () =>
-                            setState(() => _obscurePassword = !_obscurePassword),
+                // ── Logo + marca ───────────────────────────────────────────
+                Row(
+                  children: [
+                    Container(
+                      width: 52,
+                      height: 52,
+                      decoration: BoxDecoration(
+                        color: AppColors.primary,
+                        borderRadius: BorderRadius.circular(AppSpacing.radiusMd),
                       ),
+                      child: const Icon(Icons.eco_rounded,
+                          color: AppColors.onPrimary, size: 30),
                     ),
-                    validator: (v) {
-                      if (v == null || v.isEmpty) return 'Informe sua senha';
-                      if (v.length < 6) return 'Mínimo 6 caracteres';
-                      return null;
-                    },
-                  ),
-                  const SizedBox(height: 24),
-
-                  PrimaryButton(
-                    label: 'Entrar',
-                    onPressed: _handleLogin,
-                    isLoading: _isLoading,
-                  ),
-                  const SizedBox(height: 16),
-
-                  TextButton(
-                    onPressed: () => Navigator.push(
-                      context,
-                      MaterialPageRoute(builder: (_) => const SignUpScreen()),
+                    const SizedBox(width: AppSpacing.sm),
+                    Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text('AgroAdvisor',
+                            style: AppTextStyles.headlineMedium
+                                .copyWith(color: AppColors.primary)),
+                        Text('Seu agrônomo de bolso',
+                            style: AppTextStyles.bodySmall
+                                .copyWith(color: AppColors.textSecondary)),
+                      ],
                     ),
-                    child: const Text('Não tem conta? Cadastre-se'),
+                  ],
+                ),
+
+                const SizedBox(height: AppSpacing.xxl),
+
+                // ── Headline ───────────────────────────────────────────────
+                Text(
+                  'Diagnóstico\ndireto\nda lavoura.',
+                  style: AppTextStyles.displayMedium
+                      .copyWith(color: AppColors.textPrimary),
+                ),
+                const SizedBox(height: AppSpacing.sm),
+                Text(
+                  'Tire uma foto. A IA identifica doenças, pragas e '
+                  'deficiências em segundos — já considerando o clima da sua região.',
+                  style: AppTextStyles.bodyMedium
+                      .copyWith(color: AppColors.textSecondary),
+                ),
+
+                const SizedBox(height: AppSpacing.xl),
+
+                // ── Campos ─────────────────────────────────────────────────
+                TextFormField(
+                  controller: _emailCtrl,
+                  keyboardType: TextInputType.emailAddress,
+                  textInputAction: TextInputAction.next,
+                  decoration: const InputDecoration(
+                    labelText: 'E-mail ou telefone',
+                    prefixIcon: Icon(Icons.mail_outline_rounded),
                   ),
-                ],
-              ),
+                  validator: (v) {
+                    if (v == null || v.trim().isEmpty) return 'Informe seu e-mail';
+                    if (!v.contains('@')) return 'E-mail inválido';
+                    return null;
+                  },
+                ),
+                const SizedBox(height: AppSpacing.md),
+
+                TextFormField(
+                  controller: _passCtrl,
+                  obscureText: _obscure,
+                  textInputAction: TextInputAction.done,
+                  onFieldSubmitted: (_) => _handleLogin(),
+                  decoration: InputDecoration(
+                    labelText: 'Senha',
+                    prefixIcon: const Icon(Icons.lock_outline_rounded),
+                    suffixIcon: IconButton(
+                      icon: Icon(
+                        _obscure
+                            ? Icons.visibility_off_outlined
+                            : Icons.visibility_outlined,
+                      ),
+                      onPressed: () => setState(() => _obscure = !_obscure),
+                    ),
+                  ),
+                  validator: (v) {
+                    if (v == null || v.isEmpty) return 'Informe sua senha';
+                    if (v.length < 6) return 'Mínimo 6 caracteres';
+                    return null;
+                  },
+                ),
+
+                const SizedBox(height: AppSpacing.lg),
+
+                // ── Botão entrar ───────────────────────────────────────────
+                PrimaryButton(
+                  label: 'Entrar',
+                  onPressed: _handleLogin,
+                  isLoading: _isLoading,
+                ),
+
+                const SizedBox(height: AppSpacing.lg),
+
+                // ── Criar conta ────────────────────────────────────────────
+                Center(
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text('Novo por aqui? ',
+                          style: AppTextStyles.bodyMedium
+                              .copyWith(color: AppColors.textSecondary)),
+                      GestureDetector(
+                        onTap: () => Navigator.push(context,
+                            MaterialPageRoute(builder: (_) => const SignUpScreen())),
+                        child: Text(
+                          'Criar conta',
+                          style: AppTextStyles.bodyMedium.copyWith(
+                            color: AppColors.primary,
+                            fontWeight: FontWeight.w700,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+
+                const SizedBox(height: AppSpacing.lg),
+              ],
             ),
           ),
         ),

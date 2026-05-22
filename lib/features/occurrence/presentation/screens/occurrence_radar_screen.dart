@@ -4,9 +4,14 @@ import 'package:latlong2/latlong.dart';
 
 import '../../../../core/constants/app_constants.dart';
 import '../../../../core/services/location_service.dart';
+import '../../../../core/theme/app_colors.dart';
+import '../../../../core/theme/app_text_styles.dart';
+import '../../../../core/theme/app_spacing.dart';
+import '../../../../core/widgets/empty_state.dart';
 import '../../data/occurrence_repository.dart';
 import '../../domain/occurrence_model.dart';
 
+/// Radar de pragas no mapa — mostra as 8 ocorrências mais próximas.
 class OccurrenceRadarScreen extends StatefulWidget {
   const OccurrenceRadarScreen({super.key});
 
@@ -18,10 +23,10 @@ class _OccurrenceRadarScreenState extends State<OccurrenceRadarScreen> {
   final _repo = OccurrenceRepository();
   final _mapController = MapController();
 
-  double? _currentLat;
-  double? _currentLng;
+  double? _lat;
+  double? _lng;
   String? _locationError;
-  bool _isLoadingLocation = false;
+  bool _loadingLocation = false;
 
   @override
   void initState() {
@@ -30,53 +35,81 @@ class _OccurrenceRadarScreenState extends State<OccurrenceRadarScreen> {
   }
 
   Future<void> _loadLocation() async {
-    setState(() => _isLoadingLocation = true);
+    setState(() => _loadingLocation = true);
     try {
       final pos = await LocationService.getCurrentPosition();
       if (!mounted) return;
-      if (pos != null) {
-        setState(() {
-          _currentLat = pos.latitude;
-          _currentLng = pos.longitude;
-        });
-      }
+      if (pos != null) setState(() { _lat = pos.latitude; _lng = pos.longitude; });
     } on LocationException catch (e) {
       if (mounted) setState(() => _locationError = e.message);
     } catch (e) {
-      if (mounted) setState(() => _locationError = 'Erro ao obter localização: $e');
+      if (mounted) setState(() => _locationError = 'Erro ao obter localização.');
     } finally {
-      if (mounted) setState(() => _isLoadingLocation = false);
+      if (mounted) setState(() => _loadingLocation = false);
     }
   }
 
-  List<_OccurrenceWithDistance> _sortedByDistance(List<OccurrenceModel> all) {
-    final lat = _currentLat;
-    final lng = _currentLng;
-    final list = all.map((o) {
-      final dist = (lat != null && lng != null)
-          ? LocationService.distanceBetween(lat, lng, o.latitude, o.longitude)
+  List<_OccDist> _sorted(List<OccurrenceModel> all) {
+    return all.map((o) {
+      final d = (_lat != null && _lng != null)
+          ? LocationService.distanceBetween(_lat!, _lng!, o.latitude, o.longitude)
           : double.infinity;
-      return _OccurrenceWithDistance(occurrence: o, distanceMeters: dist);
+      return _OccDist(o, d);
     }).toList()
-      ..sort((a, b) => a.distanceMeters.compareTo(b.distanceMeters));
-    return list;
+      ..sort((a, b) => a.dist.compareTo(b.dist));
   }
 
   @override
   Widget build(BuildContext context) {
+    // Quando aberta via bottom nav, não tem AppBar própria
+    final isStandalone = ModalRoute.of(context)?.settings.name != null ||
+        Navigator.of(context).canPop();
+
     return Scaffold(
-      appBar: AppBar(title: const Text('Radar de Pragas no Mapa')),
+      backgroundColor: AppColors.background,
+      appBar: AppBar(
+        title: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text('Radar de pragas'),
+            Text(
+              'GOIÁS · RAIO ${AppConstants.alertRadiusDefault.toStringAsFixed(0)} KM',
+              style: AppTextStyles.labelSmall
+                  .copyWith(color: AppColors.onPrimary.withValues(alpha: 0.75)),
+            ),
+          ],
+        ),
+        automaticallyImplyLeading: isStandalone,
+      ),
       body: Column(
         children: [
-          if (_isLoadingLocation) const LinearProgressIndicator(minHeight: 4),
+          if (_loadingLocation)
+            const LinearProgressIndicator(
+              minHeight: 3,
+              color: AppColors.primaryLight,
+              backgroundColor: AppColors.primaryContainer,
+            ),
+
           if (_locationError != null)
-            Padding(
-              padding: const EdgeInsets.all(12),
-              child: Text(
-                _locationError!,
-                style: const TextStyle(color: Colors.red),
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.symmetric(
+                  horizontal: AppSpacing.md, vertical: AppSpacing.sm),
+              color: AppColors.riskHighContainer,
+              child: Row(
+                children: [
+                  const Icon(Icons.location_off_outlined,
+                      color: AppColors.riskHigh, size: 18),
+                  const SizedBox(width: AppSpacing.sm),
+                  Expanded(
+                    child: Text(_locationError!,
+                        style: AppTextStyles.bodySmall
+                            .copyWith(color: AppColors.riskHigh)),
+                  ),
+                ],
               ),
             ),
+
           Expanded(
             child: StreamBuilder<List<OccurrenceModel>>(
               stream: _repo.watchAll(),
@@ -85,31 +118,28 @@ class _OccurrenceRadarScreenState extends State<OccurrenceRadarScreen> {
                   return const Center(child: CircularProgressIndicator());
                 }
 
-                if (!snapshot.hasData || snapshot.data!.isEmpty) {
-                  return const Center(
-                    child: Text('Nenhuma ocorrência encontrada.'),
+                final all = snapshot.data ?? [];
+
+                if (all.isEmpty) {
+                  return const EmptyState(
+                    icon: Icons.radar_rounded,
+                    title: 'Nenhuma ocorrência no radar',
+                    subtitle: 'Quando produtores registrarem\nocorrências, elas aparecerão aqui.',
                   );
                 }
 
-                final sorted = _sortedByDistance(snapshot.data!);
-                final nearest =
-                    sorted.take(AppConstants.radarNearestCount).toList();
+                final sorted = _sorted(all);
+                final nearest = sorted.take(AppConstants.radarNearestCount).toList();
 
-                final center = (_currentLat != null && _currentLng != null)
-                    ? LatLng(_currentLat!, _currentLng!)
-                    : snapshot.data!.isNotEmpty
-                        ? LatLng(
-                            snapshot.data!.first.latitude,
-                            snapshot.data!.first.longitude,
-                          )
-                        : const LatLng(
-                            AppConstants.defaultLatitude,
-                            AppConstants.defaultLongitude,
-                          );
+                final center = (_lat != null && _lng != null)
+                    ? LatLng(_lat!, _lng!)
+                    : LatLng(all.first.latitude, all.first.longitude);
 
                 return Column(
                   children: [
+                    // ── Mapa ────────────────────────────────────────────────
                     Expanded(
+                      flex: 3,
                       child: FlutterMap(
                         mapController: _mapController,
                         options: MapOptions(
@@ -117,7 +147,6 @@ class _OccurrenceRadarScreenState extends State<OccurrenceRadarScreen> {
                           initialZoom: 13,
                           maxZoom: 18,
                           minZoom: 3,
-                          interactionOptions: const InteractionOptions(),
                         ),
                         children: [
                           TileLayer(
@@ -128,38 +157,57 @@ class _OccurrenceRadarScreenState extends State<OccurrenceRadarScreen> {
                           ),
                           MarkerLayer(
                             markers: [
-                              if (_currentLat != null && _currentLng != null)
+                              // Marcador do usuário
+                              if (_lat != null && _lng != null)
                                 Marker(
                                   point: center,
+                                  width: 36,
+                                  height: 36,
+                                  child: Container(
+                                    decoration: BoxDecoration(
+                                      color: AppColors.info,
+                                      shape: BoxShape.circle,
+                                      border: Border.all(
+                                          color: Colors.white, width: 2),
+                                    ),
+                                    child: const Icon(Icons.my_location_rounded,
+                                        color: Colors.white, size: 18),
+                                  ),
+                                ),
+                              // Marcadores de ocorrências
+                              ...nearest.map((item) {
+                                final risk =
+                                    item.o.diagnosis?.riskLevel.toLowerCase();
+                                final color = switch (risk) {
+                                  'alto'             => AppColors.riskHigh,
+                                  'médio' || 'medio' => AppColors.riskMedium,
+                                  _                  => AppColors.textSecondary,
+                                };
+                                return Marker(
+                                  point: LatLng(
+                                      item.o.latitude, item.o.longitude),
                                   width: 32,
                                   height: 32,
-                                  child: const Icon(
-                                    Icons.my_location,
-                                    color: Colors.blue,
-                                    size: 32,
+                                  child: Container(
+                                    decoration: BoxDecoration(
+                                      color: color,
+                                      shape: BoxShape.circle,
+                                      border: Border.all(
+                                          color: Colors.white, width: 2),
+                                    ),
+                                    child: const Icon(Icons.bug_report_rounded,
+                                        color: Colors.white, size: 16),
                                   ),
-                                ),
-                              ...nearest.map(
-                                (item) => Marker(
-                                  point: LatLng(
-                                    item.occurrence.latitude,
-                                    item.occurrence.longitude,
-                                  ),
-                                  width: 28,
-                                  height: 28,
-                                  child: const Icon(
-                                    Icons.bug_report,
-                                    color: Colors.red,
-                                    size: 28,
-                                  ),
-                                ),
-                              ),
+                                );
+                              }),
                             ],
                           ),
                         ],
                       ),
                     ),
-                    _NearestList(nearest: nearest, hasLocation: _currentLat != null),
+
+                    // ── Lista inferior ───────────────────────────────────────
+                    _NearestPanel(nearest: nearest, hasLocation: _lat != null),
                   ],
                 );
               },
@@ -171,71 +219,99 @@ class _OccurrenceRadarScreenState extends State<OccurrenceRadarScreen> {
   }
 }
 
-// ─── Lista de ocorrências mais próximas ───────────────────────────────────────
+// ── Painel de ocorrências próximas ────────────────────────────────────────────
 
-class _NearestList extends StatelessWidget {
-  final List<_OccurrenceWithDistance> nearest;
+class _NearestPanel extends StatelessWidget {
+  final List<_OccDist> nearest;
   final bool hasLocation;
 
-  const _NearestList({required this.nearest, required this.hasLocation});
+  const _NearestPanel({required this.nearest, required this.hasLocation});
 
   @override
   Widget build(BuildContext context) {
-    return Column(
-      children: [
-        Container(
-          color: Colors.grey.shade100,
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-          child: Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Text(
-                'Ocorrências próximas',
-                style: Theme.of(context).textTheme.titleMedium,
-              ),
-              Text(
-                hasLocation ? '${nearest.length} visíveis' : 'Sem localização',
-                style: const TextStyle(color: Colors.grey),
-              ),
-            ],
-          ),
-        ),
-        SizedBox(
-          height: 190,
-          child: ListView.separated(
-            padding: const EdgeInsets.all(8),
-            itemCount: nearest.length,
-            separatorBuilder: (_, _) => const Divider(height: 1),
-            itemBuilder: (context, index) {
-              final item = nearest[index];
-              return ListTile(
-                leading: const Icon(Icons.bug_report, color: Colors.red),
-                title: Text(
-                  item.occurrence.reportedBy.isEmpty
-                      ? 'Ocorrência ${index + 1}'
-                      : 'Usuário ${item.occurrence.reportedBy}',
+    return Container(
+      color: AppColors.surface,
+      child: Column(
+        children: [
+          Padding(
+            padding: const EdgeInsets.symmetric(
+                horizontal: AppSpacing.screenH, vertical: AppSpacing.sm),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Text(
+                  '${nearest.length} ALERTAS NO RAIO',
+                  style: AppTextStyles.labelSmall
+                      .copyWith(color: AppColors.textHint, letterSpacing: 0.8),
                 ),
-                subtitle: Text(
-                  item.distanceMeters.isFinite
-                      ? '${item.distanceMeters.toStringAsFixed(0)} m de distância'
-                      : 'Distância indisponível',
+                Text(
+                  hasLocation ? 'Ordenar: distância' : 'Sem localização',
+                  style: AppTextStyles.bodySmall
+                      .copyWith(color: AppColors.textSecondary),
                 ),
-                trailing: const Icon(Icons.arrow_forward_ios, size: 16),
-              );
-            },
+              ],
+            ),
           ),
-        ),
-      ],
+          const Divider(height: 1),
+          SizedBox(
+            height: 180,
+            child: ListView.separated(
+              padding: const EdgeInsets.symmetric(vertical: AppSpacing.xs),
+              itemCount: nearest.length,
+              separatorBuilder: (_, _) => const Divider(height: 1),
+              itemBuilder: (_, i) {
+                final item = nearest[i];
+                final risk = item.o.diagnosis?.riskLevel;
+                final pestName = item.o.diagnosis?.pestName;
+                final distKm = item.dist.isFinite
+                    ? item.dist < 1000
+                        ? '${item.dist.toStringAsFixed(0)} m'
+                        : '${(item.dist / 1000).toStringAsFixed(1)} km'
+                    : 'dist. indisponível';
+
+                final (dotColor) = switch (risk?.toLowerCase()) {
+                  'alto'             => AppColors.riskHigh,
+                  'médio' || 'medio' => AppColors.riskMedium,
+                  'baixo'            => AppColors.riskLow,
+                  _                  => AppColors.textHint,
+                };
+
+                return ListTile(
+                  dense: true,
+                  leading: Container(
+                    width: 36,
+                    height: 36,
+                    decoration: BoxDecoration(
+                      color: AppColors.riskHighContainer,
+                      borderRadius:
+                          BorderRadius.circular(AppSpacing.radiusSm),
+                    ),
+                    child: Icon(Icons.bug_report_outlined,
+                        color: dotColor, size: 20),
+                  ),
+                  title: Text(
+                    pestName ?? 'Ocorrência ${i + 1}',
+                    style: AppTextStyles.titleSmall,
+                  ),
+                  subtitle: Text(
+                    distKm,
+                    style: AppTextStyles.bodySmall
+                        .copyWith(color: AppColors.textSecondary),
+                  ),
+                  trailing: const Icon(Icons.chevron_right_rounded,
+                      size: 18, color: AppColors.textHint),
+                );
+              },
+            ),
+          ),
+        ],
+      ),
     );
   }
 }
 
-class _OccurrenceWithDistance {
-  final OccurrenceModel occurrence;
-  final double distanceMeters;
-
-  const _OccurrenceWithDistance({
-    required this.occurrence,
-    required this.distanceMeters,
-  });
+class _OccDist {
+  final OccurrenceModel o;
+  final double dist;
+  const _OccDist(this.o, this.dist);
 }

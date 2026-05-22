@@ -1,79 +1,85 @@
 import 'package:flutter/material.dart';
 
+import '../../../../core/theme/app_colors.dart';
+import '../../../../core/theme/app_text_styles.dart';
+import '../../../../core/theme/app_spacing.dart';
 import '../../../../core/utils/date_formatter.dart';
 import '../../domain/diagnosis_model.dart';
 
-/// Exibe o relatório completo do diagnóstico de IA.
+/// Relatório completo do diagnóstico de IA.
+/// Layout baseado no protótipo: risco em destaque, confiança circular, cards de contexto.
 class DiagnosisScreen extends StatelessWidget {
   final DiagnosisModel diagnosis;
-
   const DiagnosisScreen({super.key, required this.diagnosis});
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
+      backgroundColor: AppColors.background,
       appBar: AppBar(
-        title: const Text('Diagnóstico IA'),
-        backgroundColor: Theme.of(context).colorScheme.primary,
-        foregroundColor: Colors.white,
+        title: const Text('Diagnóstico'),
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.share_outlined),
+            onPressed: () {},
+            tooltip: 'Compartilhar',
+          ),
+        ],
       ),
       body: SingleChildScrollView(
-        padding: const EdgeInsets.all(16),
+        padding: const EdgeInsets.all(AppSpacing.screenH),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
+            // ── Banner de risco ──────────────────────────────────────────
             _RiskBanner(riskLevel: diagnosis.riskLevel),
-            const SizedBox(height: 16),
-            _InfoCard(
-              icon: Icons.bug_report_outlined,
-              title: 'Problema Identificado',
-              content: diagnosis.pestName,
+            const SizedBox(height: AppSpacing.md),
+
+            // ── Nome + confiança ─────────────────────────────────────────
+            _DiagnosisHeader(
+              pestName: diagnosis.pestName,
+              confidenceScore: diagnosis.confidenceScore,
             ),
-            const SizedBox(height: 12),
-            _ConfidenceBar(score: diagnosis.confidenceScore),
-            const SizedBox(height: 16),
+            const SizedBox(height: AppSpacing.md),
+
+            // ── Problemas detectados ─────────────────────────────────────
             if (diagnosis.detectedIssues.isNotEmpty) ...[
-              _DetectedIssuesList(issues: diagnosis.detectedIssues),
-              const SizedBox(height: 16),
+              _DetectedIssues(issues: diagnosis.detectedIssues),
+              const SizedBox(height: AppSpacing.md),
             ],
+
+            // ── Por que esse diagnóstico ─────────────────────────────────
             _InfoCard(
-              icon: Icons.description_outlined,
-              title: 'Descrição Técnica',
+              icon: Icons.psychology_outlined,
+              title: 'Por que esse diagnóstico',
               content: diagnosis.description,
+              iconColor: AppColors.primary,
+              bgColor: AppColors.surfaceVariant,
             ),
-            const SizedBox(height: 12),
+            const SizedBox(height: AppSpacing.sm),
+
+            // ── Recomendação de manejo ───────────────────────────────────
             _InfoCard(
               icon: Icons.tips_and_updates_outlined,
-              title: 'Recomendação de Manejo',
+              title: 'Recomendação de manejo',
               content: diagnosis.recommendation,
-              highlighted: true,
+              iconColor: AppColors.primary,
+              bgColor: AppColors.primaryContainer,
+              borderColor: AppColors.primaryLight.withValues(alpha: 0.4),
             ),
-            const SizedBox(height: 20),
+            const SizedBox(height: AppSpacing.md),
+
+            // ── Timestamp ─────────────────────────────────────────────────
             Text(
               'Análise realizada em ${DateFormatter.format(diagnosis.analyzedAt)}',
-              style: TextStyle(color: Colors.grey[600], fontSize: 12),
+              style: AppTextStyles.caption.copyWith(color: AppColors.textHint),
             ),
-            const SizedBox(height: 6),
-            Container(
-              padding: const EdgeInsets.all(10),
-              decoration: BoxDecoration(
-                color: Colors.amber.shade50,
-                borderRadius: BorderRadius.circular(8),
-                border: Border.all(color: Colors.amber.shade200),
-              ),
-              child: const Row(
-                children: [
-                  Icon(Icons.info_outline, color: Colors.amber, size: 16),
-                  SizedBox(width: 8),
-                  Expanded(
-                    child: Text(
-                      'Este diagnóstico é informativo. Consulte um engenheiro agrônomo para avaliação definitiva.',
-                      style: TextStyle(fontSize: 12, color: Colors.black87),
-                    ),
-                  ),
-                ],
-              ),
-            ),
+            const SizedBox(height: AppSpacing.sm),
+
+            // ── Aviso ─────────────────────────────────────────────────────
+            _DisclaimerBanner(),
+
+            const SizedBox(height: AppSpacing.lg),
           ],
         ),
       ),
@@ -81,7 +87,7 @@ class DiagnosisScreen extends StatelessWidget {
   }
 }
 
-// ─── Widgets internos ─────────────────────────────────────────────────────────
+// ── Widgets internos ──────────────────────────────────────────────────────────
 
 class _RiskBanner extends StatelessWidget {
   final String riskLevel;
@@ -90,34 +96,28 @@ class _RiskBanner extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final (color, label, icon) = switch (riskLevel.toLowerCase()) {
-      'alto' => (Colors.red, 'RISCO ALTO', Icons.warning_rounded),
-      'médio' || 'medio' => (
-          Colors.orange,
-          'RISCO MÉDIO',
-          Icons.warning_amber_rounded
-        ),
-      'baixo' => (Colors.green, 'RISCO BAIXO', Icons.check_circle_outline),
-      _ => (Colors.grey, 'RISCO DESCONHECIDO', Icons.help_outline),
+      'alto'             => (AppColors.riskHigh,   'RISCO ALTO',       Icons.warning_rounded),
+      'médio' || 'medio' => (AppColors.riskMedium, 'RISCO MÉDIO',      Icons.warning_amber_rounded),
+      'baixo'            => (AppColors.riskLow,    'RISCO BAIXO',      Icons.check_circle_outline_rounded),
+      _                  => (AppColors.textHint,   'RISCO DESCONHECIDO', Icons.help_outline_rounded),
     };
 
     return Container(
       width: double.infinity,
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+      padding: const EdgeInsets.symmetric(horizontal: AppSpacing.md, vertical: 14),
       decoration: BoxDecoration(
-        color: color.withAlpha(25),
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: color, width: 1.5),
+        color: color.withValues(alpha: 0.08),
+        borderRadius: BorderRadius.circular(AppSpacing.radiusMd),
+        border: Border.all(color: color.withValues(alpha: 0.4), width: 1.5),
       ),
       child: Row(
         children: [
           Icon(icon, color: color, size: 32),
-          const SizedBox(width: 12),
+          const SizedBox(width: AppSpacing.md),
           Text(
             label,
-            style: TextStyle(
+            style: AppTextStyles.headlineMedium.copyWith(
               color: color,
-              fontSize: 20,
-              fontWeight: FontWeight.bold,
               letterSpacing: 0.5,
             ),
           ),
@@ -127,79 +127,115 @@ class _RiskBanner extends StatelessWidget {
   }
 }
 
-class _ConfidenceBar extends StatelessWidget {
-  final double score;
-  const _ConfidenceBar({required this.score});
+class _DiagnosisHeader extends StatelessWidget {
+  final String pestName;
+  final double confidenceScore;
+  const _DiagnosisHeader({required this.pestName, required this.confidenceScore});
 
   @override
   Widget build(BuildContext context) {
-    final percent = (score * 100).toStringAsFixed(0);
-    final color =
-        score >= 0.7 ? Colors.green : score >= 0.4 ? Colors.orange : Colors.red;
+    final pct = (confidenceScore * 100).round();
+    final color = confidenceScore >= 0.7
+        ? AppColors.riskLow
+        : confidenceScore >= 0.4
+            ? AppColors.riskMedium
+            : AppColors.riskHigh;
 
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Row(
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-          children: [
-            const Text(
-              'Confiança da IA',
-              style: TextStyle(fontWeight: FontWeight.w600, fontSize: 14),
+    return Container(
+      padding: const EdgeInsets.all(AppSpacing.md),
+      decoration: BoxDecoration(
+        color: AppColors.surface,
+        borderRadius: BorderRadius.circular(AppSpacing.radiusMd),
+        border: Border.all(color: AppColors.border, width: 0.8),
+      ),
+      child: Row(
+        children: [
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'DIAGNÓSTICO PRINCIPAL',
+                  style: AppTextStyles.labelSmall
+                      .copyWith(color: AppColors.textHint, letterSpacing: 0.8),
+                ),
+                const SizedBox(height: 4),
+                Text(pestName, style: AppTextStyles.headlineSmall),
+              ],
             ),
-            Text(
-              '$percent%',
-              style: TextStyle(
-                color: color,
-                fontWeight: FontWeight.bold,
-                fontSize: 14,
-              ),
-            ),
-          ],
-        ),
-        const SizedBox(height: 6),
-        ClipRRect(
-          borderRadius: BorderRadius.circular(4),
-          child: LinearProgressIndicator(
-            value: score,
-            backgroundColor: Colors.grey.shade200,
-            valueColor: AlwaysStoppedAnimation<Color>(color),
-            minHeight: 10,
           ),
-        ),
-      ],
+          // Indicador circular de confiança
+          SizedBox(
+            width: 64,
+            height: 64,
+            child: Stack(
+              alignment: Alignment.center,
+              children: [
+                CircularProgressIndicator(
+                  value: confidenceScore,
+                  strokeWidth: 5,
+                  backgroundColor: AppColors.border,
+                  valueColor: AlwaysStoppedAnimation<Color>(color),
+                ),
+                Text(
+                  '$pct%',
+                  style: AppTextStyles.titleSmall
+                      .copyWith(color: color, fontWeight: FontWeight.w800),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
     );
   }
 }
 
-class _DetectedIssuesList extends StatelessWidget {
+class _DetectedIssues extends StatelessWidget {
   final List<String> issues;
-  const _DetectedIssuesList({required this.issues});
+  const _DetectedIssues({required this.issues});
 
   @override
   Widget build(BuildContext context) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        const Text(
-          'Problemas Detectados',
-          style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15),
-        ),
-        const SizedBox(height: 8),
-        ...issues.map(
-          (issue) => Padding(
-            padding: const EdgeInsets.only(bottom: 6),
-            child: Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Icon(Icons.circle, size: 8, color: Colors.grey.shade600),
-                const SizedBox(width: 8),
-                Expanded(child: Text(issue, style: const TextStyle(fontSize: 14))),
-              ],
+    return Container(
+      padding: const EdgeInsets.all(AppSpacing.md),
+      decoration: BoxDecoration(
+        color: AppColors.surface,
+        borderRadius: BorderRadius.circular(AppSpacing.radiusMd),
+        border: Border.all(color: AppColors.border, width: 0.8),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text('OUTRAS HIPÓTESES',
+              style: AppTextStyles.labelSmall
+                  .copyWith(color: AppColors.textHint, letterSpacing: 0.8)),
+          const SizedBox(height: AppSpacing.sm),
+          ...issues.map(
+            (issue) => Padding(
+              padding: const EdgeInsets.only(bottom: 6),
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Padding(
+                    padding: EdgeInsets.only(top: 5),
+                    child: CircleAvatar(
+                      radius: 3,
+                      backgroundColor: AppColors.textHint,
+                    ),
+                  ),
+                  const SizedBox(width: AppSpacing.sm),
+                  Expanded(
+                    child: Text(issue,
+                        style: AppTextStyles.bodyMedium
+                            .copyWith(color: AppColors.textPrimary)),
+                  ),
+                ],
+              ),
             ),
           ),
-        ),
-      ],
+        ],
+      ),
     );
   }
 }
@@ -208,25 +244,29 @@ class _InfoCard extends StatelessWidget {
   final IconData icon;
   final String title;
   final String content;
-  final bool highlighted;
+  final Color iconColor;
+  final Color bgColor;
+  final Color? borderColor;
 
   const _InfoCard({
     required this.icon,
     required this.title,
     required this.content,
-    this.highlighted = false,
+    required this.iconColor,
+    required this.bgColor,
+    this.borderColor,
   });
 
   @override
   Widget build(BuildContext context) {
-    final primary = Theme.of(context).colorScheme.primary;
     return Container(
-      padding: const EdgeInsets.all(14),
+      padding: const EdgeInsets.all(AppSpacing.md),
       decoration: BoxDecoration(
-        color: highlighted ? primary.withAlpha(18) : Colors.grey.shade50,
-        borderRadius: BorderRadius.circular(10),
+        color: bgColor,
+        borderRadius: BorderRadius.circular(AppSpacing.radiusMd),
         border: Border.all(
-          color: highlighted ? primary.withAlpha(80) : Colors.grey.shade200,
+          color: borderColor ?? AppColors.border,
+          width: 0.8,
         ),
       ),
       child: Column(
@@ -234,13 +274,43 @@ class _InfoCard extends StatelessWidget {
         children: [
           Row(
             children: [
-              Icon(icon, size: 18, color: primary),
-              const SizedBox(width: 6),
-              Text(title, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
+              Icon(icon, size: 18, color: iconColor),
+              const SizedBox(width: AppSpacing.sm),
+              Text(title,
+                  style: AppTextStyles.titleSmall
+                      .copyWith(color: AppColors.textPrimary, fontWeight: FontWeight.w700)),
             ],
           ),
-          const SizedBox(height: 8),
-          Text(content, style: const TextStyle(fontSize: 14, height: 1.5)),
+          const SizedBox(height: AppSpacing.sm),
+          Text(content,
+              style: AppTextStyles.bodyMedium
+                  .copyWith(color: AppColors.textPrimary, height: 1.6)),
+        ],
+      ),
+    );
+  }
+}
+
+class _DisclaimerBanner extends StatelessWidget {
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.all(AppSpacing.sm + 2),
+      decoration: BoxDecoration(
+        color: const Color(0xFFFFF8E1),
+        borderRadius: BorderRadius.circular(AppSpacing.radiusSm),
+        border: Border.all(color: const Color(0xFFFFD54F)),
+      ),
+      child: Row(
+        children: [
+          const Icon(Icons.info_outline_rounded, color: Color(0xFFF57C00), size: 18),
+          const SizedBox(width: AppSpacing.sm),
+          Expanded(
+            child: Text(
+              'Diagnóstico informativo. Consulte um engenheiro agrônomo para avaliação definitiva.',
+              style: AppTextStyles.bodySmall.copyWith(color: AppColors.textPrimary),
+            ),
+          ),
         ],
       ),
     );

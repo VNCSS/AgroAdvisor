@@ -9,3 +9,12 @@ import '../features/occurrence/domain/diagnosis_model.dart';
 abstract class AiService {
   Future<DiagnosisModel> analyzeImage(String imageBase64);
 }
+
+/// Lançada quando a API de IA retorna 429 (Too Many Requests).
+class AiRateLimitException implements Exception {
+  const AiRateLimitException();
+
+  @override
+  String toString() =>
+      'Limite de requisições da IA atingido. Aguarde alguns minutos e tente novamente.';
+}
