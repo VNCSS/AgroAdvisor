@@ -37,18 +37,28 @@ class AppConstants {
   /// Número de divisões do Slider de raio na tela de configurações.
   static const int alertRadiusSliderDivisions = 19;
 
-  // ─── IA / Gemini ─────────────────────────────────────────────────────────────
+  // ─── IA / Google Gemini ──────────────────────────────────────────────────────
 
-  /// Chave de API do Google Gemini.
+  /// Chave de API do Google Gemini (AI Studio).
   ///
-  /// ⚠️  SEGURANÇA: Em produção, mova esta chave para uma variável de ambiente
-  /// (--dart-define=GEMINI_API_KEY=...) ou proxie via Cloud Function para que
-  /// ela nunca fique exposta no binário do app.
-  static const String geminiApiKey = 'AIzaSyBHU1lj6zKoWek0hrmzz3XCr85RRvgN4Es';
+  /// ⚠️  SEGURANÇA: Em produção, passe via --dart-define=GEMINI_API_KEY=AIza...
+  /// para que a chave nunca seja embutida no binário. Exemplos:
+  ///   flutter run --dart-define=GEMINI_API_KEY=AIza...
+  ///   flutter build apk --dart-define=GEMINI_API_KEY=AIza...
+  ///
+  /// Obtenha sua chave gratuita em: https://aistudio.google.com/apikey
+  /// Tier gratuito: 1.500 requisições/dia — suficiente para desenvolvimento.
+  static const String geminiApiKey = String.fromEnvironment(
+    'GEMINI_API_KEY',
+    defaultValue: 'AIzaSyDZiyCHqASBm1LgtoIcorHgysGKwoQRJjo',
+  );
 
-  /// Endpoint do Gemini 2.0 Flash para análise de imagens.
+  /// Endpoint REST do Gemini 2.5 Flash (multimodal, suporta imagens).
+  ///
+  /// A chave é passada como query param ?key=... (diferente do Claude,
+  /// que usa header 'x-api-key').
   static const String geminiEndpoint =
-      'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent';
+      'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent';
 
   /// Timeout para chamadas à API de IA (segundos).
   static const int aiTimeoutSeconds = 30;

@@ -49,7 +49,7 @@ class DiagnosisService {
       return null;
     } catch (e, stack) {
       dev.log('[DiagnosisService] erro na análise', error: e, stackTrace: stack);
-      onError?.call('Erro inesperado na análise. Tente novamente.');
+      onError?.call('Falha na análise: ${e.toString()}');
       return null;
     }
   }

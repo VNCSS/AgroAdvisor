@@ -7,36 +7,26 @@ import '../core/constants/app_constants.dart';
 import '../features/occurrence/domain/diagnosis_model.dart';
 import 'ai_service.dart';
 
-/// Implementação do AiService usando Google Gemini 2.0 Flash.
+/// Implementação do AiService usando Google Gemini 2.5 Flash.
 ///
-/// A chave de API é lida de AppConstants — centralize e documente ali.
-/// Para trocar de provedor de IA, crie outra classe implementando AiService
-/// e atualize apenas a injeção em app.dart.
+/// Tier gratuito: 1.500 req/dia — ideal para desenvolvimento e testes.
+/// Para trocar de provedor, altere AppConstants.geminiEndpoint em app_constants.dart.
 class GeminiAiService implements AiService {
   static const String _apiKey = AppConstants.geminiApiKey;
   static const String _endpoint = AppConstants.geminiEndpoint;
 
-  // Prompt especializado em fitossanidade, forçando resposta em JSON puro.
-  static const String _systemPrompt = '''Você é um especialista em fitossanidade e proteção de lavouras brasileiras.
-Analise a imagem enviada e identifique pragas, doenças ou distúrbios fitossanitários visíveis.
+  static const String _systemPrompt = '''Especialista em fitossanidade. Analise a imagem e responda APENAS com JSON, sem texto extra.
 
-Responda SOMENTE com JSON válido, sem markdown, sem texto adicional, exatamente neste formato:
-{
-  "pestName": "nome da praga ou doença principal",
-  "riskLevel": "alto",
-  "description": "descrição técnica do problema observado na imagem",
-  "recommendation": "ações de manejo e controle recomendadas",
-  "confidenceScore": 0.85,
-  "detectedIssues": ["problema 1", "problema 2"]
-}
+Formato obrigatório:
+{"pestName":"<máx 40 chars>","riskLevel":"alto","description":"<máx 120 chars>","recommendation":"<máx 120 chars>","confidenceScore":0.85,"detectedIssues":["<máx 30 chars>"]}
 
 Regras:
-- riskLevel deve ser exatamente: "alto", "médio" ou "baixo"
-- confidenceScore deve ser entre 0.0 e 1.0
-- detectedIssues pode ser vazio [] se houver apenas um problema
-- Se não houver problema visível ou a imagem não for de lavoura, use pestName: "Não identificado" e confidenceScore: 0.1
-- Se não for possível determinar o risco, use riskLevel: "baixo"
-''';
+- riskLevel: exatamente "alto", "médio" ou "baixo"
+- confidenceScore: entre 0.0 e 1.0
+- detectedIssues: [] se apenas um problema
+- Sem imagem de lavoura: pestName "Não identificado", confidenceScore 0.1
+- Risco incerto: "baixo"
+- Seja breve: respeite os limites de caracteres acima''';
 
   @override
   Future<DiagnosisModel> analyzeImage(String imageBase64) async {
@@ -61,6 +51,13 @@ Regras:
         'temperature': 0.2,
         'maxOutputTokens': 1024,
         'topP': 0.8,
+        'responseMimeType': 'application/json',
+        // Desativa o raciocínio interno (thinking) do gemini-2.5-flash.
+        // Sem isso, o modelo consome tokens "pensando" antes de responder,
+        // deixando poucos tokens para o JSON e causando resposta truncada.
+        'thinkingConfig': {
+          'thinkingBudget': 0,
+        },
       },
     });
 
@@ -77,12 +74,30 @@ Regras:
       return _parseResponse(response.body);
     }
 
+    // Loga sempre o corpo completo para facilitar diagnóstico
+    dev.log(
+      '[GeminiAiService] erro HTTP ${response.statusCode}\n'
+      'body: ${response.body}',
+    );
+
+    if (response.statusCode == 400) {
+      // 400 normalmente significa chave inválida ou payload malformado.
+      // Extrai a mensagem da API para exibir algo útil.
+      final msg = _extractApiError(response.body);
+      throw Exception('Gemini: requisição inválida — $msg');
+    }
+
+    if (response.statusCode == 401 || response.statusCode == 403) {
+      throw Exception(
+        'Gemini: chave de API inválida ou sem permissão (${response.statusCode}). '
+        'Gere uma nova em aistudio.google.com/apikey',
+      );
+    }
+
     if (response.statusCode == 429) {
       final retryDelaySecs = _parseRetryDelay(response.body);
       dev.log('[GeminiAiService] 429 — retryDelay: ${retryDelaySecs}s');
 
-      // Só tenta novamente se o delay sugerido for curto (limite de RPM).
-      // Quota diária esgotada tem delay longo — falha imediatamente.
       if (retryDelaySecs != null && retryDelaySecs <= 60) {
         dev.log('[GeminiAiService] aguardando ${retryDelaySecs}s (sugerido pela API)');
         await Future.delayed(Duration(seconds: retryDelaySecs));
@@ -93,13 +108,13 @@ Regras:
           dev.log('[GeminiAiService] retry bem-sucedido');
           return _parseResponse(retry.body);
         }
+        dev.log('[GeminiAiService] retry também falhou — body: ${retry.body}');
       }
 
       throw const AiRateLimitException();
     }
 
-    dev.log('[GeminiAiService] erro HTTP ${response.statusCode} — body: ${response.body}');
-    throw Exception('Gemini API retornou ${response.statusCode}');
+    throw Exception('Gemini API [${response.statusCode}]: ${_extractApiError(response.body)}');
   }
 
   DiagnosisModel _parseResponse(String responseBody) {
@@ -112,15 +127,16 @@ Regras:
       }
 
       final content = candidates.first['content'] as Map<String, dynamic>?;
-      final parts = content?['parts'] as List?;
+      final parts = (content?['parts'] as List?)
+          ?.cast<Map<String, dynamic>>() ?? [];
 
-      if (parts == null || parts.isEmpty) {
+      if (parts.isEmpty) {
         throw const FormatException('Sem partes na resposta');
       }
 
       final rawText = (parts.first['text'] as String? ?? '').trim();
+      dev.log('[GeminiAiService] rawText recebido: ${rawText.length > 300 ? rawText.substring(0, 300) : rawText}');
 
-      // Remove blocos markdown caso o modelo os inclua mesmo sendo instruído a não
       final cleanJson = rawText
           .replaceAll('```json', '')
           .replaceAll('```', '')
@@ -154,8 +170,6 @@ Regras:
     }
   }
 
-  // Extrai o retryDelay em segundos do corpo do erro 429 da Gemini API.
-  // Retorna null se não encontrar ou não conseguir parsear.
   int? _parseRetryDelay(String body) {
     try {
       final json = jsonDecode(body) as Map<String, dynamic>;
@@ -168,6 +182,16 @@ Regras:
       }
     } catch (_) {}
     return null;
+  }
+
+  String _extractApiError(String body) {
+    try {
+      final json = jsonDecode(body) as Map<String, dynamic>;
+      final error = json['error'] as Map<String, dynamic>?;
+      final message = error?['message'] as String?;
+      if (message != null) return message;
+    } catch (_) {}
+    return body.length > 200 ? '${body.substring(0, 200)}…' : body;
   }
 
   String _normalizeRiskLevel(dynamic raw) {

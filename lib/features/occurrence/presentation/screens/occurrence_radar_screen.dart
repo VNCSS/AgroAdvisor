@@ -73,7 +73,7 @@ class _OccurrenceRadarScreenState extends State<OccurrenceRadarScreen> {
           children: [
             const Text('Radar de pragas'),
             Text(
-              'GOIÁS · RAIO ${AppConstants.alertRadiusDefault.toStringAsFixed(0)} KM',
+              'RAIO ${AppConstants.alertRadiusDefault.toStringAsFixed(0)} KM',
               style: AppTextStyles.labelSmall
                   .copyWith(color: AppColors.onPrimary.withValues(alpha: 0.75)),
             ),

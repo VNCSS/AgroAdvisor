@@ -44,9 +44,6 @@ class _OccurrenceScreenState extends State<OccurrenceScreen> {
       maxWidth: AppConstants.imageMaxWidth,
     );
     if (picked != null) {
-      setState(() async {
-        _imageBytes = await picked.readAsBytes();
-      });
       final bytes = await picked.readAsBytes();
       if (mounted) setState(() => _imageBytes = bytes);
     }
