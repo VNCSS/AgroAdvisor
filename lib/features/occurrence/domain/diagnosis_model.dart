@@ -29,6 +29,20 @@ class DiagnosisModel {
         'analyzedAt': Timestamp.fromDate(analyzedAt),
       };
 
+  /// Retorna true quando a IA não identificou nenhuma praga real.
+  bool get isHealthy {
+    final name = pestName.toLowerCase();
+    final level = riskLevel.toLowerCase();
+    if (name.contains('nenhum') ||
+        name.contains('saudável') ||
+        name.contains('sem praga') ||
+        name.contains('healthy') ||
+        name.contains('não identificad')) {
+      return true;
+    }
+    return level != 'alto' && level != 'médio' && level != 'medio' && level != 'baixo';
+  }
+
   factory DiagnosisModel.fromMap(Map<String, dynamic> map) {
     final raw = map['analyzedAt'];
     final analyzedAt = raw is Timestamp ? raw.toDate() : DateTime.now();

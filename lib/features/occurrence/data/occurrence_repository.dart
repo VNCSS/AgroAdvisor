@@ -39,14 +39,18 @@ class OccurrenceRepository {
   }
 
   /// Stream em tempo real das ocorrências de um usuário específico.
+  /// Ordenação feita no cliente para evitar exigência de índice composto no Firestore.
   Stream<List<OccurrenceModel>> watchByUser(String userId) {
     return _col
         .where('reportedBy', isEqualTo: userId)
-        .orderBy('timestamp', descending: true)
         .snapshots()
-        .map((snap) => snap.docs
-            .map((d) => OccurrenceModel.fromMap(d.data(), d.id))
-            .toList());
+        .map((snap) {
+          final list = snap.docs
+              .map((d) => OccurrenceModel.fromMap(d.data(), d.id))
+              .toList();
+          list.sort((a, b) => b.timestamp.compareTo(a.timestamp));
+          return list;
+        });
   }
 
   /// Atualiza o diagnóstico de IA de uma ocorrência existente.
@@ -55,5 +59,10 @@ class OccurrenceRepository {
     DiagnosisModel diagnosis,
   ) async {
     await _col.doc(occurrenceId).update({'diagnosis': diagnosis.toMap()});
+  }
+
+  /// Remove permanentemente uma ocorrência do Firestore.
+  Future<void> delete(String occurrenceId) async {
+    await _col.doc(occurrenceId).delete();
   }
 }

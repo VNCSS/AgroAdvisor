@@ -83,6 +83,20 @@ class _HistoryScreenState extends State<HistoryScreen> {
             child: StreamBuilder<List<OccurrenceModel>>(
               stream: _repo.watchByUser(userId),
               builder: (context, snapshot) {
+                if (snapshot.hasError) {
+                  return Center(
+                    child: Padding(
+                      padding: const EdgeInsets.all(AppSpacing.screenH),
+                      child: Text(
+                        'Erro ao carregar histórico:\n${snapshot.error}',
+                        style: AppTextStyles.bodySmall
+                            .copyWith(color: AppColors.error),
+                        textAlign: TextAlign.center,
+                      ),
+                    ),
+                  );
+                }
+
                 if (snapshot.connectionState == ConnectionState.waiting) {
                   return const Center(child: CircularProgressIndicator());
                 }
@@ -215,13 +229,63 @@ class _SectionLabel extends StatelessWidget {
   }
 }
 
-class _HistoryItem extends StatelessWidget {
+class _HistoryItem extends StatefulWidget {
   final OccurrenceModel occurrence;
   const _HistoryItem({required this.occurrence});
 
   @override
+  State<_HistoryItem> createState() => _HistoryItemState();
+}
+
+class _HistoryItemState extends State<_HistoryItem> {
+  final _repo = OccurrenceRepository();
+
+  Future<bool> _confirmDelete() async {
+    return await showDialog<bool>(
+          context: context,
+          builder: (ctx) => AlertDialog(
+            title: const Text('Excluir ocorrência?'),
+            content: const Text(
+              'Esta ação é permanente e não pode ser desfeita.',
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(ctx, false),
+                child: const Text('Cancelar'),
+              ),
+              TextButton(
+                onPressed: () => Navigator.pop(ctx, true),
+                style: TextButton.styleFrom(foregroundColor: AppColors.error),
+                child: const Text('Excluir'),
+              ),
+            ],
+          ),
+        ) ??
+        false;
+  }
+
+  Future<void> _delete() async {
+    try {
+      await _repo.delete(widget.occurrence.id);
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Ocorrência excluída.')),
+      );
+    } catch (_) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Falha ao excluir. Tente novamente.'),
+          backgroundColor: AppColors.error,
+        ),
+      );
+    }
+  }
+
+  @override
   Widget build(BuildContext context) {
-    final d = occurrence.diagnosis;
+    final o = widget.occurrence;
+    final d = o.diagnosis;
     final hasD = d != null;
 
     final (iconColor, iconBg) = switch (d?.riskLevel.toLowerCase()) {
@@ -231,75 +295,91 @@ class _HistoryItem extends StatelessWidget {
       _                  => (AppColors.textHint,   AppColors.surfaceVariant),
     };
 
-    return GestureDetector(
-      onTap: hasD
-          ? () => Navigator.push(context,
-                MaterialPageRoute(builder: (_) => DiagnosisScreen(diagnosis: d)))
-          : null,
-      child: Container(
+    return Dismissible(
+      key: ValueKey(o.id),
+      direction: DismissDirection.endToStart,
+      confirmDismiss: (_) => _confirmDelete(),
+      onDismissed: (_) => _delete(),
+      background: Container(
         margin: const EdgeInsets.only(bottom: AppSpacing.sm),
-        padding: const EdgeInsets.all(AppSpacing.md),
+        alignment: Alignment.centerRight,
+        padding: const EdgeInsets.only(right: AppSpacing.md),
         decoration: BoxDecoration(
-          color: AppColors.surface,
+          color: AppColors.error,
           borderRadius: BorderRadius.circular(AppSpacing.radiusMd),
-          border: Border.all(color: AppColors.border, width: 0.8),
         ),
-        child: Row(
-          children: [
-            // Ícone
-            Container(
-              width: 44,
-              height: 44,
-              decoration: BoxDecoration(
-                color: iconBg,
-                borderRadius: BorderRadius.circular(AppSpacing.radiusSm),
+        child: const Icon(Icons.delete_outline_rounded, color: Colors.white, size: 24),
+      ),
+      child: GestureDetector(
+        onTap: hasD
+            ? () => Navigator.push(context,
+                  MaterialPageRoute(builder: (_) => DiagnosisScreen(diagnosis: d)))
+            : null,
+        child: Container(
+          margin: const EdgeInsets.only(bottom: AppSpacing.sm),
+          padding: const EdgeInsets.all(AppSpacing.md),
+          decoration: BoxDecoration(
+            color: AppColors.surface,
+            borderRadius: BorderRadius.circular(AppSpacing.radiusMd),
+            border: Border.all(color: AppColors.border, width: 0.8),
+          ),
+          child: Row(
+            children: [
+              // Ícone
+              Container(
+                width: 44,
+                height: 44,
+                decoration: BoxDecoration(
+                  color: iconBg,
+                  borderRadius: BorderRadius.circular(AppSpacing.radiusSm),
+                ),
+                child: Icon(
+                  hasD ? Icons.eco_rounded : Icons.hourglass_empty_rounded,
+                  color: iconColor,
+                  size: 22,
+                ),
               ),
-              child: Icon(
-                hasD ? Icons.eco_rounded : Icons.hourglass_empty_rounded,
-                color: iconColor,
-                size: 22,
-              ),
-            ),
-            const SizedBox(width: AppSpacing.md),
+              const SizedBox(width: AppSpacing.md),
 
-            // Informações
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    d?.pestName ?? 'Aguardando análise...',
-                    style: AppTextStyles.titleSmall
-                        .copyWith(color: AppColors.textPrimary, fontWeight: FontWeight.w600),
-                  ),
-                  const SizedBox(height: 2),
-                  Text(
-                    DateFormatter.format(occurrence.timestamp),
-                    style: AppTextStyles.bodySmall.copyWith(color: AppColors.textSecondary),
-                  ),
-                ],
+              // Informações
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      d?.pestName ?? 'Aguardando análise...',
+                      style: AppTextStyles.titleSmall
+                          .copyWith(color: AppColors.textPrimary, fontWeight: FontWeight.w600),
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      DateFormatter.format(o.timestamp),
+                      style: AppTextStyles.bodySmall.copyWith(color: AppColors.textSecondary),
+                    ),
+                  ],
+                ),
               ),
-            ),
 
-            // Badge de confiança
-            if (hasD) ...[
-              Column(
-                crossAxisAlignment: CrossAxisAlignment.end,
-                children: [
-                  Text(
-                    '${(d.confidenceScore * 100).toStringAsFixed(0)}%',
-                    style: AppTextStyles.titleSmall
-                        .copyWith(color: iconColor, fontWeight: FontWeight.w700),
-                  ),
-                  Text('confiança',
-                      style: AppTextStyles.labelSmall
-                          .copyWith(color: AppColors.textHint)),
-                ],
-              ),
-              const SizedBox(width: AppSpacing.sm),
-              Icon(Icons.chevron_right_rounded, color: AppColors.textHint, size: 20),
+              // Badge de confiança
+              if (hasD) ...[
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.end,
+                  children: [
+                    Text(
+                      '${(d.confidenceScore * 100).toStringAsFixed(0)}%',
+                      style: AppTextStyles.titleSmall
+                          .copyWith(color: iconColor, fontWeight: FontWeight.w700),
+                    ),
+                    Text('confiança',
+                        style: AppTextStyles.labelSmall
+                            .copyWith(color: AppColors.textHint)),
+                  ],
+                ),
+                const SizedBox(width: AppSpacing.sm),
+                Icon(Icons.chevron_right_rounded, color: AppColors.textHint, size: 20),
+              ],
             ],
-          ],
+          ),
         ),
       ),
     );

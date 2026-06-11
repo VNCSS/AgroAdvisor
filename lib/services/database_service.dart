@@ -83,6 +83,11 @@ class DatabaseService {
         );
   }
 
+  /// Remove permanentemente uma ocorrência do Firestore.
+  Future<void> deleteOccurrence(String occurrenceId) async {
+    await _db.collection('occurrences').doc(occurrenceId).delete();
+  }
+
   /// Adiciona ou atualiza o diagnóstico de IA em uma ocorrência existente.
   Future<void> updateOccurrenceDiagnosis(
     String occurrenceId,
@@ -118,6 +123,26 @@ class DatabaseService {
       {'userId': userId, 'fcmToken': token},
       SetOptions(merge: true),
     );
+  }
+
+  /// Garante que o documento do usuário tenha os campos de notificação com
+  /// valores padrão, sem sobrescrever preferências já salvas.
+  Future<void> initUserDefaults(String userId) async {
+    final ref = _db.collection('users').doc(userId);
+    final snap = await ref.get();
+    final data = snap.data() ?? {};
+
+    final defaults = <String, dynamic>{};
+    if (!data.containsKey('notificationsEnabled')) {
+      defaults['notificationsEnabled'] = true;
+    }
+    if (!data.containsKey('alertRadiusKm')) {
+      defaults['alertRadiusKm'] = 20.0;
+    }
+
+    if (defaults.isNotEmpty) {
+      await ref.set(defaults, SetOptions(merge: true));
+    }
   }
 
   /// Retorna todos os usuários com notificações habilitadas.

@@ -118,7 +118,10 @@ class _OccurrenceRadarScreenState extends State<OccurrenceRadarScreen> {
                   return const Center(child: CircularProgressIndicator());
                 }
 
-                final all = snapshot.data ?? [];
+                final all = (snapshot.data ?? [])
+                    .where((o) =>
+                        o.diagnosis != null && !o.diagnosis!.isHealthy)
+                    .toList();
 
                 if (all.isEmpty) {
                   return const EmptyState(

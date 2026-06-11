@@ -6,6 +6,7 @@ import 'services/auth_service.dart';
 import 'services/database_service.dart';
 import 'services/diagnosis_service.dart';
 import 'services/gemini_ai_service.dart';
+import 'services/nearby_alert_service.dart';
 import 'services/notification_service.dart';
 import 'features/auth/presentation/screens/login_screen.dart';
 import 'features/main_shell.dart';
@@ -21,6 +22,7 @@ class AgroAdvisorApp extends StatelessWidget {
         ChangeNotifierProvider(create: (_) => AuthService()),
         Provider(create: (_) => DatabaseService()),
         Provider(create: (_) => NotificationService()),
+        Provider(create: (_) => NearbyAlertService()),
         Provider(
           create: (_) => DiagnosisService(
             aiService: GeminiAiService(),
@@ -48,11 +50,16 @@ class AuthWrapper extends StatelessWidget {
 
     if (auth.currentUser != null) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
-        context.read<NotificationService>().initialize(auth.currentUser!.uid);
+        final uid = auth.currentUser!.uid;
+        context.read<NotificationService>().initialize(uid);
+        context.read<NearbyAlertService>().initialize(uid);
       });
       return const MainShell();
     }
 
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      context.read<NearbyAlertService>().stop();
+    });
     return const LoginScreen();
   }
 }

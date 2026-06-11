@@ -90,10 +90,12 @@ class NotificationService {
 
   Future<void> _registerToken(String userId) async {
     final token = await _fcm.getToken();
-    if (token != null) {
-      dev.log('[FCM] token registrado');
-      await _db.saveUserFcmToken(userId, token);
-    }
+    if (token == null) return;
+    dev.log('[FCM] token registrado');
+    await _db.saveUserFcmToken(userId, token);
+    // Garante que notificationsEnabled e alertRadiusKm existam no Firestore
+    // para que a Cloud Function encontre o usuário ao consultar.
+    await _db.initUserDefaults(userId);
   }
 
   void _handleForegroundMessage(RemoteMessage message) {

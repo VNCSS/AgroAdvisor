@@ -11,7 +11,8 @@ import '../../../occurrence/domain/occurrence_model.dart';
 import '../../../occurrence/presentation/screens/occurrence_screen.dart';
 import '../../../occurrence/presentation/screens/occurrence_radar_screen.dart';
 import '../../../occurrence/presentation/widgets/occurrence_card.dart';
-import '../../../settings/presentation/screens/notification_settings_screen.dart';
+import '../../../notifications/data/notification_repository.dart';
+import '../../../notifications/presentation/screens/notifications_screen.dart';
 
 /// Tela inicial — painel do produtor.
 /// UX: ação principal evidente, informações contextuais no topo, radar recente embaixo.
@@ -53,9 +54,14 @@ class HomeScreen extends StatelessWidget {
         stream: repo.watchAll(),
         builder: (context, snapshot) {
           final all = snapshot.data ?? [];
+          final pestOccurrences = all
+              .where((o) => o.diagnosis != null && !o.diagnosis!.isHealthy)
+              .toList();
           final mine = all.where((o) => o.reportedBy == userId).toList();
-          final diagCount = mine.where((o) => o.diagnosis != null).length;
-          final recent = all.take(3).toList();
+          final diagCount = mine
+              .where((o) => o.diagnosis != null && !o.diagnosis!.isHealthy)
+              .length;
+          final recent = pestOccurrences.take(3).toList();
           final loading = snapshot.connectionState == ConnectionState.waiting;
 
           return CustomScrollView(
@@ -95,8 +101,8 @@ class HomeScreen extends StatelessWidget {
                           iconColor: AppColors.riskMedium,
                           iconBg: AppColors.riskMediumContainer,
                           title: 'Radar de pragas',
-                          subtitle: all.isNotEmpty
-                              ? '${all.length > 8 ? 8 : all.length} alertas próximos'
+                          subtitle: pestOccurrences.isNotEmpty
+                              ? '${pestOccurrences.length > 8 ? 8 : pestOccurrences.length} alertas próximos'
                               : 'Sem alertas',
                           onTap: () => Navigator.push(context,
                               MaterialPageRoute(builder: (_) => const OccurrenceRadarScreen())),
@@ -219,24 +225,72 @@ class _Header extends StatelessWidget {
   }
 }
 
-class _NotifButton extends StatelessWidget {
+class _NotifButton extends StatefulWidget {
+  @override
+  State<_NotifButton> createState() => _NotifButtonState();
+}
+
+class _NotifButtonState extends State<_NotifButton> {
+  final _repo = NotificationRepository();
+
   @override
   Widget build(BuildContext context) {
-    return Container(
-      width: 44,
-      height: 44,
-      decoration: BoxDecoration(
-        color: AppColors.surface,
-        borderRadius: BorderRadius.circular(AppSpacing.radiusMd),
-        border: Border.all(color: AppColors.border),
-      ),
-      child: IconButton(
-        icon: const Icon(Icons.notifications_outlined, size: 22),
-        color: AppColors.textSecondary,
-        padding: EdgeInsets.zero,
-        onPressed: () => Navigator.push(context,
-            MaterialPageRoute(builder: (_) => const NotificationSettingsScreen())),
-      ),
+    final userId = context.read<AuthService>().currentUser?.uid ?? '';
+
+    return StreamBuilder<int>(
+      stream: _repo.watchUnreadCount(userId),
+      builder: (context, snapshot) {
+        final unread = snapshot.data ?? 0;
+
+        return SizedBox(
+          width: 44,
+          height: 44,
+          child: Stack(
+            clipBehavior: Clip.none,
+            children: [
+              Container(
+                width: 44,
+                height: 44,
+                decoration: BoxDecoration(
+                  color: AppColors.surface,
+                  borderRadius: BorderRadius.circular(AppSpacing.radiusMd),
+                  border: Border.all(color: AppColors.border),
+                ),
+                child: IconButton(
+                  icon: const Icon(Icons.notifications_outlined, size: 22),
+                  color: AppColors.textSecondary,
+                  padding: EdgeInsets.zero,
+                  onPressed: () => Navigator.push(context,
+                      MaterialPageRoute(
+                          builder: (_) => const NotificationsScreen())),
+                ),
+              ),
+              if (unread > 0)
+                Positioned(
+                  top: -3,
+                  right: -3,
+                  child: Container(
+                    width: 18,
+                    height: 18,
+                    decoration: const BoxDecoration(
+                      color: AppColors.error,
+                      shape: BoxShape.circle,
+                    ),
+                    child: Center(
+                      child: Text(
+                        unread > 9 ? '9+' : '$unread',
+                        style: const TextStyle(
+                            color: Colors.white,
+                            fontSize: 10,
+                            fontWeight: FontWeight.w700),
+                      ),
+                    ),
+                  ),
+                ),
+            ],
+          ),
+        );
+      },
     );
   }
 }
