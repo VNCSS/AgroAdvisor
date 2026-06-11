@@ -50,7 +50,7 @@ class AppConstants {
   /// Tier gratuito: 1.500 requisições/dia — suficiente para desenvolvimento.
   static const String geminiApiKey = String.fromEnvironment(
     'GEMINI_API_KEY',
-    defaultValue: 'AIzaSyDZiyCHqASBm1LgtoIcorHgysGKwoQRJjo',
+    defaultValue: '',
   );
 
   /// Endpoint REST do Gemini 2.5 Flash (multimodal, suporta imagens).

@@ -1,0 +1,26 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // Ocorrências: leitura para qualquer usuário autenticado,
+    // escrita somente pelo próprio autor.
+    match /occurrences/{id} {
+      allow read:          if request.auth != null;
+      allow create:        if request.auth != null;
+      allow update, delete: if request.auth != null
+                           && request.auth.uid == resource.data.reportedBy;
+    }
+
+    // Propriedades: acesso exclusivo do dono.
+    match /properties/{id} {
+      allow read, write: if request.auth != null
+                        && request.auth.uid == resource.data.ownerId;
+    }
+
+    // Configurações do usuário: acesso exclusivo do próprio usuário.
+    match /users/{userId} {
+      allow read, write: if request.auth != null
+                        && request.auth.uid == userId;
+    }
+  }
+}

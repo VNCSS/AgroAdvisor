@@ -81,15 +81,13 @@ class _HistoryScreenState extends State<HistoryScreen> {
           // ── Lista ────────────────────────────────────────────────────────
           Expanded(
             child: StreamBuilder<List<OccurrenceModel>>(
-              stream: _repo.watchAll(),
+              stream: _repo.watchByUser(userId),
               builder: (context, snapshot) {
                 if (snapshot.connectionState == ConnectionState.waiting) {
                   return const Center(child: CircularProgressIndicator());
                 }
 
-                final mine = (snapshot.data ?? [])
-                    .where((o) => o.reportedBy == userId)
-                    .toList();
+                final mine = snapshot.data ?? [];
 
                 if (mine.isEmpty) {
                   return EmptyState(
