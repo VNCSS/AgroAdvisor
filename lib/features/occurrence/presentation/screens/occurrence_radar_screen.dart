@@ -460,19 +460,32 @@ class _NearestPanel extends StatelessWidget {
                   _                  => AppColors.textHint,
                 };
 
+                ImageProvider? cardImage;
+                if (item.o.imageBase64.isNotEmpty) {
+                  try {
+                    cardImage = MemoryImage(base64Decode(item.o.imageBase64));
+                  } catch (_) {}
+                }
+
                 return ListTile(
                   dense: true,
                   onTap: () => onTap(item.o),
-                  leading: Container(
-                    width: 36,
-                    height: 36,
-                    decoration: BoxDecoration(
-                      color: AppColors.riskHighContainer,
-                      borderRadius:
-                          BorderRadius.circular(AppSpacing.radiusSm),
-                    ),
-                    child: Icon(Icons.bug_report_outlined,
-                        color: dotColor, size: 20),
+                  leading: ClipRRect(
+                    borderRadius: BorderRadius.circular(AppSpacing.radiusSm),
+                    child: cardImage != null
+                        ? Image(
+                            image: cardImage,
+                            width: 36,
+                            height: 36,
+                            fit: BoxFit.cover,
+                          )
+                        : Container(
+                            width: 36,
+                            height: 36,
+                            color: AppColors.riskHighContainer,
+                            child: Icon(Icons.bug_report_outlined,
+                                color: dotColor, size: 20),
+                          ),
                   ),
                   title: Text(
                     pestName ?? 'Ocorrência ${i + 1}',
