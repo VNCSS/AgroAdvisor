@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
@@ -282,6 +284,19 @@ class _HistoryItemState extends State<_HistoryItem> {
     }
   }
 
+  Widget _iconFallback(Color bg, Color color, bool hasD) {
+    return Container(
+      width: 56,
+      height: 56,
+      color: bg,
+      child: Icon(
+        hasD ? Icons.eco_rounded : Icons.hourglass_empty_rounded,
+        color: color,
+        size: 26,
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final o = widget.occurrence;
@@ -325,18 +340,36 @@ class _HistoryItemState extends State<_HistoryItem> {
           ),
           child: Row(
             children: [
-              // Ícone
-              Container(
-                width: 44,
-                height: 44,
-                decoration: BoxDecoration(
-                  color: iconBg,
-                  borderRadius: BorderRadius.circular(AppSpacing.radiusSm),
-                ),
-                child: Icon(
-                  hasD ? Icons.eco_rounded : Icons.hourglass_empty_rounded,
-                  color: iconColor,
-                  size: 22,
+              // Thumbnail da imagem ou ícone fallback
+              GestureDetector(
+                onTap: o.imageBase64.isNotEmpty
+                    ? () {
+                        // Impede que o tap propague para o GestureDetector do card
+                        Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (_) => _FullScreenImageScreen(
+                              imageBase64: o.imageBase64,
+                              heroTag: o.id,
+                            ),
+                          ),
+                        );
+                      }
+                    : null,
+                child: Hero(
+                  tag: o.id,
+                  child: ClipRRect(
+                    borderRadius: BorderRadius.circular(AppSpacing.radiusSm),
+                    child: o.imageBase64.isNotEmpty
+                        ? Image.memory(
+                            base64Decode(o.imageBase64),
+                            width: 56,
+                            height: 56,
+                            fit: BoxFit.cover,
+                            errorBuilder: (_, __, ___) => _iconFallback(iconBg, iconColor, hasD),
+                          )
+                        : _iconFallback(iconBg, iconColor, hasD),
+                  ),
                 ),
               ),
               const SizedBox(width: AppSpacing.md),
@@ -379,6 +412,40 @@ class _HistoryItemState extends State<_HistoryItem> {
                 Icon(Icons.chevron_right_rounded, color: AppColors.textHint, size: 20),
               ],
             ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _FullScreenImageScreen extends StatelessWidget {
+  final String imageBase64;
+  final String heroTag;
+
+  const _FullScreenImageScreen({
+    required this.imageBase64,
+    required this.heroTag,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final imageBytes = base64Decode(imageBase64);
+
+    return Scaffold(
+      backgroundColor: Colors.black,
+      appBar: AppBar(
+        backgroundColor: Colors.black,
+        foregroundColor: Colors.white,
+        elevation: 0,
+      ),
+      body: Center(
+        child: Hero(
+          tag: heroTag,
+          child: InteractiveViewer(
+            minScale: 0.5,
+            maxScale: 4.0,
+            child: Image.memory(imageBytes, fit: BoxFit.contain),
           ),
         ),
       ),
