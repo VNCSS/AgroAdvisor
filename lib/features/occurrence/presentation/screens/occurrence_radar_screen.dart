@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:latlong2/latlong.dart';
@@ -59,9 +61,42 @@ class _OccurrenceRadarScreenState extends State<OccurrenceRadarScreen> {
       ..sort((a, b) => a.dist.compareTo(b.dist));
   }
 
+  void _showOccurrencePopup(OccurrenceModel o) {
+    final diag = o.diagnosis;
+    if (diag == null) return;
+
+    final risk = diag.riskLevel.toLowerCase();
+    final riskColor = switch (risk) {
+      'alto'             => AppColors.riskHigh,
+      'médio' || 'medio' => AppColors.riskMedium,
+      'baixo'            => AppColors.riskLow,
+      _                  => AppColors.textSecondary,
+    };
+    final riskLabel = diag.riskLevel[0].toUpperCase() + diag.riskLevel.substring(1);
+
+    ImageProvider? imageProvider;
+    if (o.imageBase64.isNotEmpty) {
+      try {
+        imageProvider = MemoryImage(base64Decode(o.imageBase64));
+      } catch (_) {}
+    }
+
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Colors.transparent,
+      isScrollControlled: true,
+      builder: (_) => _OccurrencePopup(
+        pestName: diag.pestName,
+        riskLabel: riskLabel,
+        riskColor: riskColor,
+        description: diag.description,
+        imageProvider: imageProvider,
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
-    // Quando aberta via bottom nav, não tem AppBar própria
     final isStandalone = ModalRoute.of(context)?.settings.name != null ||
         Navigator.of(context).canPop();
 
@@ -177,7 +212,7 @@ class _OccurrenceRadarScreenState extends State<OccurrenceRadarScreen> {
                                         color: Colors.white, size: 18),
                                   ),
                                 ),
-                              // Marcadores de ocorrências
+                              // Marcadores de ocorrências (clicáveis)
                               ...nearest.map((item) {
                                 final risk =
                                     item.o.diagnosis?.riskLevel.toLowerCase();
@@ -191,15 +226,18 @@ class _OccurrenceRadarScreenState extends State<OccurrenceRadarScreen> {
                                       item.o.latitude, item.o.longitude),
                                   width: 32,
                                   height: 32,
-                                  child: Container(
-                                    decoration: BoxDecoration(
-                                      color: color,
-                                      shape: BoxShape.circle,
-                                      border: Border.all(
-                                          color: Colors.white, width: 2),
+                                  child: GestureDetector(
+                                    onTap: () => _showOccurrencePopup(item.o),
+                                    child: Container(
+                                      decoration: BoxDecoration(
+                                        color: color,
+                                        shape: BoxShape.circle,
+                                        border: Border.all(
+                                            color: Colors.white, width: 2),
+                                      ),
+                                      child: const Icon(Icons.bug_report_rounded,
+                                          color: Colors.white, size: 16),
                                     ),
-                                    child: const Icon(Icons.bug_report_rounded,
-                                        color: Colors.white, size: 16),
                                   ),
                                 );
                               }),
@@ -210,7 +248,11 @@ class _OccurrenceRadarScreenState extends State<OccurrenceRadarScreen> {
                     ),
 
                     // ── Lista inferior ───────────────────────────────────────
-                    _NearestPanel(nearest: nearest, hasLocation: _lat != null),
+                    _NearestPanel(
+                      nearest: nearest,
+                      hasLocation: _lat != null,
+                      onTap: _showOccurrencePopup,
+                    ),
                   ],
                 );
               },
@@ -222,13 +264,152 @@ class _OccurrenceRadarScreenState extends State<OccurrenceRadarScreen> {
   }
 }
 
+// ── Popup de resumo da ocorrência ─────────────────────────────────────────────
+
+class _OccurrencePopup extends StatelessWidget {
+  final String pestName;
+  final String riskLabel;
+  final Color riskColor;
+  final String description;
+  final ImageProvider? imageProvider;
+
+  const _OccurrencePopup({
+    required this.pestName,
+    required this.riskLabel,
+    required this.riskColor,
+    required this.description,
+    required this.imageProvider,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: EdgeInsets.only(
+        left: AppSpacing.md,
+        right: AppSpacing.md,
+        bottom: MediaQuery.of(context).viewInsets.bottom + AppSpacing.md,
+      ),
+      child: Material(
+        color: AppColors.surface,
+        borderRadius: BorderRadius.circular(AppSpacing.radiusMd),
+        clipBehavior: Clip.antiAlias,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            // ── Cabeçalho ──────────────────────────────────────────────────
+            Container(
+              color: riskColor.withValues(alpha: 0.12),
+              padding: const EdgeInsets.symmetric(
+                  horizontal: AppSpacing.md, vertical: AppSpacing.sm),
+              child: Row(
+                children: [
+                  Icon(Icons.bug_report_rounded, color: riskColor, size: 20),
+                  const SizedBox(width: AppSpacing.sm),
+                  Expanded(
+                    child: Text(
+                      'Ocorrência detectada',
+                      style: AppTextStyles.labelSmall
+                          .copyWith(color: riskColor, letterSpacing: 0.6),
+                    ),
+                  ),
+                  GestureDetector(
+                    onTap: () => Navigator.of(context).pop(),
+                    child: Icon(Icons.close_rounded,
+                        color: AppColors.textSecondary, size: 20),
+                  ),
+                ],
+              ),
+            ),
+
+            // ── Conteúdo ───────────────────────────────────────────────────
+            Padding(
+              padding: const EdgeInsets.all(AppSpacing.md),
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  // Imagem da praga
+                  ClipRRect(
+                    borderRadius:
+                        BorderRadius.circular(AppSpacing.radiusSm),
+                    child: imageProvider != null
+                        ? Image(
+                            image: imageProvider!,
+                            width: 80,
+                            height: 80,
+                            fit: BoxFit.cover,
+                          )
+                        : Container(
+                            width: 80,
+                            height: 80,
+                            color: AppColors.riskHighContainer,
+                            child: Icon(Icons.bug_report_outlined,
+                                color: riskColor, size: 36),
+                          ),
+                  ),
+                  const SizedBox(width: AppSpacing.md),
+
+                  // Nome e risco
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          pestName,
+                          style: AppTextStyles.titleMedium,
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                        const SizedBox(height: AppSpacing.xs),
+                        // Badge de risco
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: AppSpacing.sm, vertical: 2),
+                          decoration: BoxDecoration(
+                            color: riskColor.withValues(alpha: 0.15),
+                            borderRadius:
+                                BorderRadius.circular(AppSpacing.radiusXs),
+                          ),
+                          child: Text(
+                            'Risco $riskLabel',
+                            style: AppTextStyles.labelSmall
+                                .copyWith(color: riskColor),
+                          ),
+                        ),
+                        if (description.isNotEmpty) ...[
+                          const SizedBox(height: AppSpacing.sm),
+                          Text(
+                            description,
+                            style: AppTextStyles.bodySmall
+                                .copyWith(color: AppColors.textSecondary),
+                            maxLines: 3,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ],
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
 // ── Painel de ocorrências próximas ────────────────────────────────────────────
 
 class _NearestPanel extends StatelessWidget {
   final List<_OccDist> nearest;
   final bool hasLocation;
+  final void Function(OccurrenceModel) onTap;
 
-  const _NearestPanel({required this.nearest, required this.hasLocation});
+  const _NearestPanel({
+    required this.nearest,
+    required this.hasLocation,
+    required this.onTap,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -272,7 +453,7 @@ class _NearestPanel extends StatelessWidget {
                         : '${(item.dist / 1000).toStringAsFixed(1)} km'
                     : 'dist. indisponível';
 
-                final (dotColor) = switch (risk?.toLowerCase()) {
+                final dotColor = switch (risk?.toLowerCase()) {
                   'alto'             => AppColors.riskHigh,
                   'médio' || 'medio' => AppColors.riskMedium,
                   'baixo'            => AppColors.riskLow,
@@ -281,6 +462,7 @@ class _NearestPanel extends StatelessWidget {
 
                 return ListTile(
                   dense: true,
+                  onTap: () => onTap(item.o),
                   leading: Container(
                     width: 36,
                     height: 36,
