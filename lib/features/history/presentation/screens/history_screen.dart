@@ -9,6 +9,7 @@ import '../../../../core/theme/app_spacing.dart';
 import '../../../../core/utils/date_formatter.dart';
 import '../../../../core/widgets/empty_state.dart';
 import '../../../../services/auth_service.dart';
+import '../../../../services/diagnosis_service.dart';
 import '../../../occurrence/data/occurrence_repository.dart';
 import '../../../occurrence/domain/occurrence_model.dart';
 import '../../../occurrence/presentation/screens/diagnosis_screen.dart';
@@ -241,6 +242,31 @@ class _HistoryItem extends StatefulWidget {
 
 class _HistoryItemState extends State<_HistoryItem> {
   final _repo = OccurrenceRepository();
+  bool _analyzing = false;
+
+  Future<void> _analyzeWithAI() async {
+    setState(() => _analyzing = true);
+    String? err;
+    try {
+      final result = await context.read<DiagnosisService>().analyzeAndSave(
+            widget.occurrence.id,
+            widget.occurrence.imageBase64,
+            onError: (e) => err = e,
+          );
+      if (!mounted) return;
+      if (result == null) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(err ?? 'Erro desconhecido na análise.'),
+            backgroundColor: AppColors.error,
+            duration: const Duration(seconds: 10),
+          ),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _analyzing = false);
+    }
+  }
 
   Future<bool> _confirmDelete() async {
     return await showDialog<bool>(
@@ -393,7 +419,6 @@ class _HistoryItemState extends State<_HistoryItem> {
                 ),
               ),
 
-              // Badge de confiança
               if (hasD) ...[
                 Column(
                   crossAxisAlignment: CrossAxisAlignment.end,
@@ -410,6 +435,42 @@ class _HistoryItemState extends State<_HistoryItem> {
                 ),
                 const SizedBox(width: AppSpacing.sm),
                 Icon(Icons.chevron_right_rounded, color: AppColors.textHint, size: 20),
+              ] else if (_analyzing) ...[
+                const SizedBox(
+                  width: 20,
+                  height: 20,
+                  child: CircularProgressIndicator(
+                    strokeWidth: 2,
+                    color: AppColors.primary,
+                  ),
+                ),
+              ] else ...[
+                GestureDetector(
+                  onTap: _analyzeWithAI,
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: AppSpacing.sm, vertical: 6),
+                    decoration: BoxDecoration(
+                      color: AppColors.primaryContainer,
+                      borderRadius:
+                          BorderRadius.circular(AppSpacing.radiusFull),
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        const Icon(Icons.auto_fix_high_rounded,
+                            size: 13, color: AppColors.primary),
+                        const SizedBox(width: 4),
+                        Text(
+                          'Analisar com IA',
+                          style: AppTextStyles.labelSmall.copyWith(
+                              color: AppColors.primary,
+                              fontWeight: FontWeight.w600),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
               ],
             ],
           ),
