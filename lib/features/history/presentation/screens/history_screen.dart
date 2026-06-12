@@ -140,14 +140,14 @@ class _HistoryScreenState extends State<HistoryScreen> {
                     if (diagnosed.isNotEmpty) ...[
                       _SectionLabel('ÚLTIMOS 30 DIAS'),
                       const SizedBox(height: AppSpacing.sm),
-                      ...diagnosed.map((o) => _HistoryItem(occurrence: o)),
+                      ...diagnosed.map((o) => _HistoryItem(key: ValueKey(o.id), occurrence: o)),
                     ],
 
                     if (pending.isNotEmpty) ...[
                       const SizedBox(height: AppSpacing.md),
                       _SectionLabel('AGUARDANDO ANÁLISE'),
                       const SizedBox(height: AppSpacing.sm),
-                      ...pending.map((o) => _HistoryItem(occurrence: o)),
+                      ...pending.map((o) => _HistoryItem(key: ValueKey(o.id), occurrence: o)),
                     ],
 
                     const SizedBox(height: 100),
@@ -234,7 +234,7 @@ class _SectionLabel extends StatelessWidget {
 
 class _HistoryItem extends StatefulWidget {
   final OccurrenceModel occurrence;
-  const _HistoryItem({required this.occurrence});
+  const _HistoryItem({super.key, required this.occurrence});
 
   @override
   State<_HistoryItem> createState() => _HistoryItemState();
