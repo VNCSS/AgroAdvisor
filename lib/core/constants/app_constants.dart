@@ -48,7 +48,10 @@ class AppConstants {
   ///
   /// Obtenha sua chave gratuita em: https://aistudio.google.com/apikey
   /// Tier gratuito: 1.500 requisições/dia — suficiente para desenvolvimento.
-  static const String geminiApiKey = String.fromEnvironment('GEMINI_API_KEY');
+  static const String geminiApiKey = String.fromEnvironment(
+    'GEMINI_API_KEY',
+    defaultValue: '',
+  );
 
   /// Endpoint REST do Gemini 2.5 Flash (multimodal, suporta imagens).
   ///
