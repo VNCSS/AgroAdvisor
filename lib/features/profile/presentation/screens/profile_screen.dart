@@ -6,6 +6,7 @@ import '../../../../core/theme/app_text_styles.dart';
 import '../../../../core/theme/app_spacing.dart';
 import '../../../../core/widgets/empty_state.dart';
 import '../../../../services/auth_service.dart';
+import '../../../dashboard/presentation/screens/property_dashboard_screen.dart';
 import '../../../property/data/property_repository.dart';
 import '../../../property/domain/property_model.dart';
 import '../../../property/presentation/screens/property_form_screen.dart';
@@ -120,6 +121,13 @@ class _ProfileScreenState extends State<ProfileScreen> {
                     itemBuilder: (_, i) => _PropertyCard(
                       property: properties[i],
                       onTap: () => _goToForm(properties[i]),
+                      onDashboard: () => Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (_) =>
+                              PropertyDashboardScreen(property: properties[i]),
+                        ),
+                      ),
                     ),
                   ),
                 ),
@@ -292,7 +300,12 @@ class _Chip extends StatelessWidget {
 class _PropertyCard extends StatelessWidget {
   final PropertyModel property;
   final VoidCallback onTap;
-  const _PropertyCard({required this.property, required this.onTap});
+  final VoidCallback onDashboard;
+  const _PropertyCard({
+    required this.property,
+    required this.onTap,
+    required this.onDashboard,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -329,6 +342,11 @@ class _PropertyCard extends StatelessWidget {
                           .copyWith(color: AppColors.textSecondary)),
                 ],
               ),
+            ),
+            TextButton.icon(
+              onPressed: onDashboard,
+              icon: const Icon(Icons.insights_rounded, size: 18),
+              label: const Text('Painel'),
             ),
             const Icon(Icons.edit_outlined, color: AppColors.textHint, size: 18),
           ],

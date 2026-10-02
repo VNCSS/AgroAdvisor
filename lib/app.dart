@@ -10,6 +10,7 @@ import 'services/nearby_alert_service.dart';
 import 'services/notification_service.dart';
 import 'features/auth/presentation/screens/login_screen.dart';
 import 'features/main_shell.dart';
+import 'features/weather/data/weather_repository.dart';
 
 /// Raiz do aplicativo: configura providers, tema e AuthWrapper.
 class AgroAdvisorApp extends StatelessWidget {
@@ -29,6 +30,8 @@ class AgroAdvisorApp extends StatelessWidget {
             db: DatabaseService(),
           ),
         ),
+        // Instância única para compartilhar o cache de previsões entre telas.
+        Provider(create: (_) => WeatherRepository()),
       ],
       child: MaterialApp(
         title: 'AgroAdvisor',

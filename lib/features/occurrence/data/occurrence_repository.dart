@@ -53,6 +53,19 @@ class OccurrenceRepository {
         });
   }
 
+  /// Leitura única das ocorrências registradas a partir de [since]
+  /// (mais recentes primeiro). Filtro e ordenação no mesmo campo —
+  /// não exige índice composto no Firestore.
+  Future<List<OccurrenceModel>> getSince(DateTime since) async {
+    final snap = await _col
+        .where('timestamp', isGreaterThanOrEqualTo: Timestamp.fromDate(since))
+        .orderBy('timestamp', descending: true)
+        .get();
+    return snap.docs
+        .map((d) => OccurrenceModel.fromMap(d.data(), d.id))
+        .toList();
+  }
+
   /// Atualiza o diagnóstico de IA de uma ocorrência existente.
   Future<void> updateDiagnosis(
     String occurrenceId,
