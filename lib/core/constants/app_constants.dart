@@ -34,6 +34,11 @@ class AppConstants {
   /// Raio padrão ao criar um novo usuário (km).
   static const double alertRadiusDefault = 20.0;
 
+  /// Idade máxima (dias) de uma ocorrência para gerar alerta de proximidade.
+  /// Evita notificar todo o histórico da região no primeiro login.
+  /// Valor de projeto.
+  static const int nearbyAlertMaxAgeDays = 7;
+
   /// Número de divisões do Slider de raio na tela de configurações.
   static const int alertRadiusSliderDivisions = 19;
 

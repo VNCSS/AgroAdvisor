@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:geolocator/geolocator.dart';
 
 /// Encapsula toda a lógica de permissão e captura de GPS.
@@ -32,10 +34,25 @@ class LocationService {
       );
     }
 
-    return Geolocator.getCurrentPosition(
-      locationSettings: LocationSettings(accuracy: accuracy),
-    );
+    try {
+      return await Geolocator.getCurrentPosition(
+        locationSettings: LocationSettings(
+          accuracy: accuracy,
+          // Sem limite, a tela ficava aguardando indefinidamente sem sinal.
+          timeLimit: gpsTimeout,
+        ),
+      );
+    } on TimeoutException {
+      throw const LocationException(
+        'Não foi possível obter a localização a tempo. Verifique o sinal de '
+        'GPS e tente novamente.',
+      );
+    }
   }
+
+  /// Tempo máximo de espera pelo GPS. Folgado para não falhar em
+  /// "partida a frio" do GPS em campo.
+  static const Duration gpsTimeout = Duration(seconds: 60);
 
   /// Calcula a distância em metros entre dois pontos.
   static double distanceBetween(

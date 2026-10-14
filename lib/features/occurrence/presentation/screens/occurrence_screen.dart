@@ -356,6 +356,7 @@ class _Feed extends StatelessWidget {
         }
 
         final items = snapshot.data ?? [];
+        final userId = context.read<AuthService>().currentUser?.uid;
 
         if (items.isEmpty) {
           return const EmptyState(
@@ -372,6 +373,7 @@ class _Feed extends StatelessWidget {
           itemBuilder: (_, i) => OccurrenceCard(
             occurrence: items[i],
             isAnalyzingBySystem: analyzingId == items[i].id,
+            canAnalyze: items[i].reportedBy == userId,
           ),
         );
       },
