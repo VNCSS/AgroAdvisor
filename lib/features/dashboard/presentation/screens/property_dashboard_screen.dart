@@ -67,7 +67,11 @@ class _PropertyDashboardScreenState extends State<PropertyDashboardScreen> {
   Future<void> _loadRegional() {
     if (!_hasValidLocation) return Future.value();
     final future = _buildRegional();
-    setState(() => _regional = future);
+    // Corpo em bloco: com `=>` o callback devolveria o Future atribuído,
+    // e o setState recusa callbacks que retornam Future.
+    setState(() {
+      _regional = future;
+    });
     // Erros são exibidos pelo FutureBuilder; aqui apenas evita erro não tratado.
     return future.then((_) {}, onError: (_) {});
   }
