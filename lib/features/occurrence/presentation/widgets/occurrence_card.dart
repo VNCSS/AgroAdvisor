@@ -17,16 +17,10 @@ class OccurrenceCard extends StatefulWidget {
   final OccurrenceModel occurrence;
   final bool isAnalyzingBySystem;
 
-  /// false esconde o botão "Analisar com IA". Só o autor pode gravar o
-  /// diagnóstico (regras do Firestore); para os demais, a chamada à IA
-  /// seria feita e a gravação, recusada.
-  final bool canAnalyze;
-
   const OccurrenceCard({
     super.key,
     required this.occurrence,
     this.isAnalyzingBySystem = false,
-    this.canAnalyze = true,
   });
 
   @override
@@ -137,7 +131,7 @@ class _OccurrenceCardState extends State<OccurrenceCard> {
                       isAnalyzing: isAnalyzing,
                       hasDiag: hasDiag,
                       diagnosis: o.diagnosis,
-                      onAnalyze: widget.canAnalyze ? _analyzeManually : null,
+                      onAnalyze: _analyzeManually,
                     ),
                   ],
                 ),
@@ -164,7 +158,7 @@ class _Badge extends StatelessWidget {
   final bool isAnalyzing;
   final bool hasDiag;
   final dynamic diagnosis; // DiagnosisModel?
-  final VoidCallback? onAnalyze; // null = sem permissão para analisar
+  final VoidCallback onAnalyze;
 
   const _Badge({
     required this.isAnalyzing,
@@ -231,12 +225,6 @@ class _Badge extends StatelessWidget {
           ],
         ),
       );
-    }
-
-    if (onAnalyze == null) {
-      return Text('Aguardando análise',
-          style: AppTextStyles.labelSmall
-              .copyWith(color: AppColors.textSecondary));
     }
 
     return GestureDetector(

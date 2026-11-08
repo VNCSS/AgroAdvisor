@@ -138,8 +138,7 @@ class _HistoryScreenState extends State<HistoryScreen> {
                     const SizedBox(height: AppSpacing.md),
 
                     if (diagnosed.isNotEmpty) ...[
-                      // Lista todas as diagnosticadas (não há filtro de data).
-                      _SectionLabel('DIAGNOSTICADAS'),
+                      _SectionLabel('ÚLTIMOS 30 DIAS'),
                       const SizedBox(height: AppSpacing.sm),
                       ...diagnosed.map((o) => _HistoryItem(key: ValueKey(o.id), occurrence: o)),
                     ],
@@ -393,7 +392,7 @@ class _HistoryItemState extends State<_HistoryItem> {
                             width: 56,
                             height: 56,
                             fit: BoxFit.cover,
-                            errorBuilder: (_, _, _) => _iconFallback(iconBg, iconColor, hasD),
+                            errorBuilder: (_, __, ___) => _iconFallback(iconBg, iconColor, hasD),
                           )
                         : _iconFallback(iconBg, iconColor, hasD),
                   ),
