@@ -1,4 +1,5 @@
 import '../../../core/services/location_service.dart';
+import '../../favorability/domain/organism_name.dart';
 import '../../occurrence/domain/occurrence_model.dart';
 import '../../weather/data/weather_repository.dart';
 
@@ -11,9 +12,10 @@ class OccurrenceDistance {
 
 /// Organismo identificado pela IA, agregado na região.
 ///
-/// O agrupamento é feito pelo nome retornado pela IA (normalizado apenas em
-/// maiúsculas/minúsculas e espaços). Ainda não há correspondência com nomes
-/// científicos — variações de escrita podem aparecer como itens separados.
+/// O agrupamento é feito pelo nome retornado pela IA, normalizado da mesma
+/// forma que no motor de favorabilidade (sem acentos, caixa e pontuação),
+/// para que Dashboard e alertas contem as mesmas ocorrências. Sinônimos e
+/// nomes científicos não são unificados aqui.
 class OrganismCount {
   final String name;
   final int count;
@@ -168,8 +170,7 @@ class RegionalSummary {
     );
   }
 
-  static String _normalize(String name) =>
-      name.trim().toLowerCase().replaceAll(RegExp(r'\s+'), ' ');
+  static String _normalize(String name) => normalizeOrganismName(name);
 
   static List<OrganismCount> _groupOrganisms(
     List<OccurrenceDistance> problems,

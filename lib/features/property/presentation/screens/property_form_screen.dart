@@ -8,6 +8,26 @@ import '../../../../core/widgets/primary_button.dart';
 import '../../data/property_repository.dart';
 import '../../domain/property_model.dart';
 
+/// Converte o texto digitado em coordenada, aceitando vírgula decimal
+/// ("-22,9035"). Retorna null se não for número.
+double? parseCoordinate(String? text) {
+  if (text == null) return null;
+  return double.tryParse(text.trim().replaceAll(',', '.'));
+}
+
+/// Validação do campo de coordenada. [limit] = 90 (latitude) ou 180
+/// (longitude).
+String? validateCoordinate(String? text, {required double limit}) {
+  if (text == null || text.trim().isEmpty) return 'Campo obrigatório';
+  final value = parseCoordinate(text);
+  if (value == null || !value.isFinite) return 'Número inválido';
+  if (value < -limit || value > limit) {
+    return 'Deve estar entre -${limit.toStringAsFixed(0)} e '
+        '${limit.toStringAsFixed(0)}';
+  }
+  return null;
+}
+
 /// Formulário para criar ou editar uma propriedade rural.
 class PropertyFormScreen extends StatefulWidget {
   final PropertyModel? existingProperty;
@@ -81,8 +101,8 @@ class _PropertyFormScreenState extends State<PropertyFormScreen> {
         id: widget.existingProperty?.id ?? '',
         name: _nameController.text.trim(),
         mainCrop: _selectedCrop!,
-        latitude: double.parse(_latController.text),
-        longitude: double.parse(_lngController.text),
+        latitude: parseCoordinate(_latController.text)!,
+        longitude: parseCoordinate(_lngController.text)!,
         ownerId: userId,
       );
 
@@ -238,11 +258,7 @@ class _PropertyFormScreenState extends State<PropertyFormScreen> {
                   border: OutlineInputBorder(),
                   hintText: 'ex: -22.9035',
                 ),
-                validator: (v) {
-                  if (v == null || v.isEmpty) return 'Campo obrigatório';
-                  if (double.tryParse(v) == null) return 'Número inválido';
-                  return null;
-                },
+                validator: (v) => validateCoordinate(v, limit: 90),
               ),
               const SizedBox(height: 12),
 
@@ -256,11 +272,7 @@ class _PropertyFormScreenState extends State<PropertyFormScreen> {
                   border: OutlineInputBorder(),
                   hintText: 'ex: -43.1729',
                 ),
-                validator: (v) {
-                  if (v == null || v.isEmpty) return 'Campo obrigatório';
-                  if (double.tryParse(v) == null) return 'Número inválido';
-                  return null;
-                },
+                validator: (v) => validateCoordinate(v, limit: 180),
               ),
               const SizedBox(height: 32),
 

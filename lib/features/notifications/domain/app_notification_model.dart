@@ -1,6 +1,10 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 
 class AppNotificationModel {
+  /// Valor de [type] dos alertas preventivos de favorabilidade. Documentos
+  /// antigos (alertas de proximidade) não têm o campo → [type] null.
+  static const String typePreventive = 'preventive';
+
   final String id;
   final String title;
   final String body;
@@ -9,6 +13,7 @@ class AppNotificationModel {
   final String? occurrenceId;
   final double? latitude;
   final double? longitude;
+  final String? type;
 
   const AppNotificationModel({
     required this.id,
@@ -19,7 +24,10 @@ class AppNotificationModel {
     this.occurrenceId,
     this.latitude,
     this.longitude,
+    this.type,
   });
+
+  bool get isPreventive => type == typePreventive;
 
   factory AppNotificationModel.fromMap(Map<String, dynamic> map, String id) {
     final raw = map['receivedAt'];
@@ -33,6 +41,7 @@ class AppNotificationModel {
       occurrenceId: map['occurrenceId'] as String?,
       latitude: (map['latitude'] as num?)?.toDouble(),
       longitude: (map['longitude'] as num?)?.toDouble(),
+      type: map['type'] as String?,
     );
   }
 }

@@ -138,7 +138,11 @@ class _NotifCard extends StatelessWidget {
                 borderRadius: BorderRadius.circular(AppSpacing.radiusSm),
               ),
               child: Icon(
-                Icons.pest_control_rounded,
+                // Alertas preventivos (favorabilidade) têm ícone próprio;
+                // os de proximidade mantêm o ícone original.
+                notif.isPreventive
+                    ? Icons.thermostat_rounded
+                    : Icons.pest_control_rounded,
                 color: unread ? AppColors.riskHigh : AppColors.textHint,
                 size: 22,
               ),

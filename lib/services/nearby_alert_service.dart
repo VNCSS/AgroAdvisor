@@ -4,6 +4,7 @@ import 'dart:math';
 
 import 'package:cloud_firestore/cloud_firestore.dart';
 
+import '../core/constants/app_constants.dart';
 import '../features/occurrence/domain/diagnosis_model.dart';
 import '../features/property/domain/property_model.dart';
 import 'database_service.dart';
@@ -103,6 +104,14 @@ class NearbyAlertService {
         continue;
       }
 
+      // Só ocorrências recentes: sem isso, o primeiro login notificaria
+      // todas as pragas já registradas na região.
+      final rawTs = data['timestamp'];
+      if (rawTs is! Timestamp ||
+          !isRecentForAlert(rawTs.toDate(), DateTime.now())) {
+        continue;
+      }
+
       final rawDiag = data['diagnosis'];
       if (rawDiag == null) continue;
 
@@ -176,6 +185,14 @@ class NearbyAlertService {
       _notified.remove(occId); // permite nova tentativa
     }
   }
+
+  /// true se a ocorrência registrada em [timestamp] ainda deve gerar alerta.
+  static bool isRecentForAlert(
+    DateTime timestamp,
+    DateTime now, {
+    int maxAgeDays = AppConstants.nearbyAlertMaxAgeDays,
+  }) =>
+      !timestamp.isBefore(now.subtract(Duration(days: maxAgeDays)));
 
   // ── Haversine ─────────────────────────────────────────────────────────────
 
