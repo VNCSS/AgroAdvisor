@@ -10,7 +10,6 @@ import '../../../../core/theme/app_colors.dart';
 import '../../../../core/theme/app_text_styles.dart';
 import '../../../../core/theme/app_spacing.dart';
 import '../../../../core/widgets/empty_state.dart';
-import '../../../weather/data/weather_repository.dart';
 import '../../data/occurrence_repository.dart';
 import '../../domain/occurrence_model.dart';
 
@@ -109,8 +108,7 @@ class _OccurrenceRadarScreenState extends State<OccurrenceRadarScreen> {
           children: [
             const Text('Radar de pragas'),
             Text(
-              // O radar exibe as N mais próximas; não aplica raio.
-              '${AppConstants.radarNearestCount} OCORRÊNCIAS MAIS PRÓXIMAS',
+              'RAIO ${AppConstants.alertRadiusDefault.toStringAsFixed(0)} KM',
               style: AppTextStyles.labelSmall
                   .copyWith(color: AppColors.onPrimary.withValues(alpha: 0.75)),
             ),
@@ -158,9 +156,6 @@ class _OccurrenceRadarScreenState extends State<OccurrenceRadarScreen> {
                 final all = (snapshot.data ?? [])
                     .where((o) =>
                         o.diagnosis != null && !o.diagnosis!.isHealthy)
-                    // Coordenada ausente vira (0, 0) no modelo — não plotar.
-                    .where((o) => WeatherRepository.isValidCoordinate(
-                        o.latitude, o.longitude))
                     .toList();
 
                 if (all.isEmpty) {

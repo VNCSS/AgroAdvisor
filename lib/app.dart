@@ -9,7 +9,6 @@ import 'services/gemini_ai_service.dart';
 import 'services/nearby_alert_service.dart';
 import 'services/notification_service.dart';
 import 'features/auth/presentation/screens/login_screen.dart';
-import 'features/favorability/data/preventive_alert_service.dart';
 import 'features/main_shell.dart';
 import 'features/weather/data/weather_repository.dart';
 
@@ -33,13 +32,6 @@ class AgroAdvisorApp extends StatelessWidget {
         ),
         // Instância única para compartilhar o cache de previsões entre telas.
         Provider(create: (_) => WeatherRepository()),
-        // Alertas preventivos de favorabilidade: gravam no mesmo sistema de
-        // notificações e reutilizam o cache de previsões acima.
-        Provider(
-          create: (context) => PreventiveAlertService.create(
-            weather: context.read<WeatherRepository>(),
-          ),
-        ),
       ],
       child: MaterialApp(
         title: 'AgroAdvisor',
@@ -64,15 +56,12 @@ class AuthWrapper extends StatelessWidget {
         final uid = auth.currentUser!.uid;
         context.read<NotificationService>().initialize(uid);
         context.read<NearbyAlertService>().initialize(uid);
-        // Não lança exceção; repetições são limitadas e deduplicadas.
-        context.read<PreventiveAlertService>().run(uid);
       });
       return const MainShell();
     }
 
     WidgetsBinding.instance.addPostFrameCallback((_) {
       context.read<NearbyAlertService>().stop();
-      context.read<PreventiveAlertService>().reset();
     });
     return const LoginScreen();
   }
