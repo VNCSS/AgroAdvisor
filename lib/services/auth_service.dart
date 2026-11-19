@@ -66,7 +66,11 @@ class AuthService extends ChangeNotifier {
   // ──────────────────────────────────────────────
   // HELPER: traduz códigos de erro do Firebase
   // ──────────────────────────────────────────────
-  String _mapFirebaseError(String code) {
+  String _mapFirebaseError(String code) => mapFirebaseAuthError(code);
+
+  /// Traduz o código de erro do Firebase Auth. Estático para ser testável
+  /// sem instanciar o FirebaseAuth.
+  static String mapFirebaseAuthError(String code) {
     switch (code) {
       case 'email-already-in-use':
         return 'Este e-mail já está cadastrado.';
@@ -78,6 +82,12 @@ class AuthService extends ChangeNotifier {
         return 'Usuário não encontrado.';
       case 'wrong-password':
         return 'Senha incorreta.';
+      // SDKs atuais (proteção contra enumeração de e-mails) devolvem este
+      // código no lugar de user-not-found / wrong-password.
+      case 'invalid-credential':
+        return 'E-mail ou senha incorretos.';
+      case 'network-request-failed':
+        return 'Sem conexão com a internet. Verifique e tente novamente.';
       case 'too-many-requests':
         return 'Muitas tentativas. Tente novamente mais tarde.';
       default:

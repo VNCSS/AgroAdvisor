@@ -6,6 +6,10 @@ import '../../../../core/theme/app_text_styles.dart';
 import '../../../../core/theme/app_spacing.dart';
 import '../../../../core/widgets/empty_state.dart';
 import '../../../../services/auth_service.dart';
+import '../../../../services/notification_service.dart';
+import '../../../../services/nearby_alert_service.dart';
+import '../../../favorability/data/environmental_alert_service.dart';
+import '../../../dashboard/presentation/screens/property_dashboard_screen.dart';
 import '../../../property/data/property_repository.dart';
 import '../../../property/domain/property_model.dart';
 import '../../../property/presentation/screens/property_form_screen.dart';
@@ -33,8 +37,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
   }
 
   void _reload() => setState(() {
-        _propertiesFuture = _repo.getByOwner(_userId);
-      });
+    _propertiesFuture = _repo.getByOwner(_userId);
+  });
 
   static String _initials(String email) {
     final parts = email.split('@').first.split(RegExp(r'[._\-]'));
@@ -65,10 +69,22 @@ class _ProfileScreenState extends State<ProfileScreen> {
                   initials: _initials(email),
                   email: email,
                   propertyCount: properties.length,
-                  onSettings: () => Navigator.push(context,
-                      MaterialPageRoute(
-                          builder: (_) => const NotificationSettingsScreen())),
-                  onLogout: () => auth.signOut(),
+                  onSettings: () => Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (_) => const NotificationSettingsScreen(),
+                    ),
+                  ),
+                  onLogout: () async {
+                    final nearby = context.read<NearbyAlertService>();
+                    final environmental = context
+                        .read<EnvironmentalAlertService>();
+                    final notifications = context.read<NotificationService>();
+                    await nearby.stop();
+                    environmental.reset();
+                    await notifications.unregister();
+                    await auth.signOut();
+                  },
                 ),
               ),
 
@@ -76,13 +92,18 @@ class _ProfileScreenState extends State<ProfileScreen> {
               SliverToBoxAdapter(
                 child: Padding(
                   padding: const EdgeInsets.fromLTRB(
-                    AppSpacing.screenH, AppSpacing.lg,
-                    AppSpacing.screenH, AppSpacing.sm,
+                    AppSpacing.screenH,
+                    AppSpacing.lg,
+                    AppSpacing.screenH,
+                    AppSpacing.sm,
                   ),
                   child: Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
-                      Text('Minha propriedade', style: AppTextStyles.headlineSmall),
+                      Text(
+                        'Minha propriedade',
+                        style: AppTextStyles.headlineSmall,
+                      ),
                       TextButton.icon(
                         onPressed: () => _goToForm(null),
                         icon: const Icon(Icons.add_rounded, size: 18),
@@ -106,20 +127,31 @@ class _ProfileScreenState extends State<ProfileScreen> {
                   child: EmptyState(
                     icon: Icons.agriculture_rounded,
                     title: 'Nenhuma propriedade',
-                    subtitle: 'Cadastre sua fazenda para\norganizar seus diagnósticos.',
+                    subtitle:
+                        'Cadastre sua fazenda para\norganizar seus diagnósticos.',
                     actionLabel: 'Adicionar propriedade',
                     onAction: () => _goToForm(null),
                   ),
                 )
               else
                 SliverPadding(
-                  padding: const EdgeInsets.symmetric(horizontal: AppSpacing.screenH),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: AppSpacing.screenH,
+                  ),
                   sliver: SliverList.separated(
                     itemCount: properties.length,
-                    separatorBuilder: (_, _) => const SizedBox(height: AppSpacing.sm),
+                    separatorBuilder: (_, _) =>
+                        const SizedBox(height: AppSpacing.sm),
                     itemBuilder: (_, i) => _PropertyCard(
                       property: properties[i],
                       onTap: () => _goToForm(properties[i]),
+                      onDashboard: () => Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (_) =>
+                              PropertyDashboardScreen(property: properties[i]),
+                        ),
+                      ),
                     ),
                   ),
                 ),
@@ -136,7 +168,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
     final updated = await Navigator.push<bool>(
       context,
       MaterialPageRoute(
-          builder: (_) => PropertyFormScreen(existingProperty: existing)),
+        builder: (_) => PropertyFormScreen(existingProperty: existing),
+      ),
     );
     if (updated == true && mounted) _reload();
   }
@@ -208,8 +241,9 @@ class _ProfileHeader extends StatelessWidget {
                   child: Center(
                     child: Text(
                       initials,
-                      style: AppTextStyles.headlineMedium
-                          .copyWith(color: AppColors.onPrimary),
+                      style: AppTextStyles.headlineMedium.copyWith(
+                        color: AppColors.onPrimary,
+                      ),
                     ),
                   ),
                 ),
@@ -222,14 +256,17 @@ class _ProfileHeader extends StatelessWidget {
                     children: [
                       Text(
                         email,
-                        style: AppTextStyles.titleSmall
-                            .copyWith(color: AppColors.textPrimary),
+                        style: AppTextStyles.titleSmall.copyWith(
+                          color: AppColors.textPrimary,
+                        ),
                         overflow: TextOverflow.ellipsis,
                       ),
                       const SizedBox(height: 4),
                       Row(
                         children: [
-                          _Chip('$propertyCount propriedade${propertyCount != 1 ? "s" : ""}'),
+                          _Chip(
+                            '$propertyCount propriedade${propertyCount != 1 ? "s" : ""}',
+                          ),
                         ],
                       ),
                     ],
@@ -292,7 +329,12 @@ class _Chip extends StatelessWidget {
 class _PropertyCard extends StatelessWidget {
   final PropertyModel property;
   final VoidCallback onTap;
-  const _PropertyCard({required this.property, required this.onTap});
+  final VoidCallback onDashboard;
+  const _PropertyCard({
+    required this.property,
+    required this.onTap,
+    required this.onDashboard,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -314,23 +356,43 @@ class _PropertyCard extends StatelessWidget {
                 color: AppColors.primaryContainer,
                 borderRadius: BorderRadius.circular(AppSpacing.radiusSm),
               ),
-              child: const Icon(Icons.grass_rounded, color: AppColors.primary, size: 22),
+              child: const Icon(
+                Icons.grass_rounded,
+                color: AppColors.primary,
+                size: 22,
+              ),
             ),
             const SizedBox(width: AppSpacing.md),
             Expanded(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(property.name,
-                      style: AppTextStyles.titleSmall.copyWith(
-                          color: AppColors.textPrimary, fontWeight: FontWeight.w600)),
-                  Text(property.mainCrop,
-                      style: AppTextStyles.bodySmall
-                          .copyWith(color: AppColors.textSecondary)),
+                  Text(
+                    property.name,
+                    style: AppTextStyles.titleSmall.copyWith(
+                      color: AppColors.textPrimary,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                  Text(
+                    property.mainCrop,
+                    style: AppTextStyles.bodySmall.copyWith(
+                      color: AppColors.textSecondary,
+                    ),
+                  ),
                 ],
               ),
             ),
-            const Icon(Icons.edit_outlined, color: AppColors.textHint, size: 18),
+            TextButton.icon(
+              onPressed: onDashboard,
+              icon: const Icon(Icons.insights_rounded, size: 18),
+              label: const Text('Painel'),
+            ),
+            const Icon(
+              Icons.edit_outlined,
+              color: AppColors.textHint,
+              size: 18,
+            ),
           ],
         ),
       ),

@@ -1,193 +1,129 @@
 import 'dart:async';
 import 'dart:developer' as dev;
-import 'dart:math';
 
-import 'package:cloud_firestore/cloud_firestore.dart';
-
-import '../features/occurrence/domain/diagnosis_model.dart';
+import '../core/constants/app_constants.dart';
+import '../features/notifications/data/intelligent_alert_store.dart';
+import '../features/notifications/domain/intelligent_alert.dart';
+import '../features/occurrence/domain/occurrence_model.dart';
 import '../features/property/domain/property_model.dart';
-import 'database_service.dart';
+import '../features/settings/domain/user_settings_model.dart';
 
-/// Escuta novas ocorrências em tempo real e grava notificações no Firestore
-/// quando uma praga é detectada dentro do raio configurado pelo usuário.
-///
-/// Substitui a Cloud Function para o plano Spark (sem Cloud Functions).
-/// Funciona enquanto o app está aberto em foreground ou background recente.
+/// Cada cliente avalia somente seu usuário; não lê tokens de terceiros.
 class NearbyAlertService {
-  final DatabaseService _db;
-  final FirebaseFirestore _firestore;
+  final AlertDispatcher dispatcher;
+  final Future<UserSettingsModel?> Function(String) loadSettings;
+  final Future<List<PropertyModel>> Function(String) loadProperties;
+  final Stream<List<OccurrenceModel>> Function(DateTime) watchOccurrences;
+  final Future<List<OccurrenceModel>> Function(DateTime) loadOccurrences;
+  final DateTime Function() now;
+  StreamSubscription<List<OccurrenceModel>>? _sub;
+  String? _user;
+  int _generation = 0;
+  Future<void>? _initializing;
 
-  String? _currentUserId;
-  StreamSubscription<QuerySnapshot<Map<String, dynamic>>>? _sub;
-  final Set<String> _notified = {};
+  NearbyAlertService({
+    required this.dispatcher,
+    required this.loadSettings,
+    required this.loadProperties,
+    required this.watchOccurrences,
+    required this.loadOccurrences,
+    DateTime Function()? now,
+  }) : now = now ?? DateTime.now;
 
-  NearbyAlertService({DatabaseService? db, FirebaseFirestore? firestore})
-      : _db = db ?? DatabaseService(),
-        _firestore = firestore ?? FirebaseFirestore.instance;
-
-  /// Inicia (ou reinicia) a escuta para [userId].
-  /// Idempotente: não faz nada se o mesmo userId já estiver ativo.
-  Future<void> initialize(String userId) async {
-    if (_currentUserId == userId && _sub != null) return;
-    await stop();
-    _currentUserId = userId;
-
-    try {
-      final settings = await _db.getUserSettings(userId);
-      if (settings?.notificationsEnabled == false) {
-        dev.log('[NearbyAlert] notificações desabilitadas para $userId');
-        return;
-      }
-
-      final alertRadiusKm = settings?.alertRadiusKm ?? 20.0;
-
-      final properties = await _db.getUserProperties(userId);
-      dev.log('[NearbyAlert] ${properties.length} propriedade(s) carregada(s)');
-
-      // Carrega IDs já notificados para não reenviar após reinício do app.
-      final existing = await _firestore
-          .collection('notifications')
-          .doc(userId)
-          .collection('items')
-          .get();
-      for (final doc in existing.docs) {
-        final id = doc.data()['occurrenceId'] as String?;
-        if (id != null) _notified.add(id);
-      }
-      dev.log('[NearbyAlert] ${_notified.length} ocorrência(s) já notificada(s)');
-
-      _sub = _firestore
-          .collection('occurrences')
-          .snapshots()
-          .listen(
-            (snap) => _onSnapshot(snap, userId, properties, alertRadiusKm),
-            onError: (e) => dev.log('[NearbyAlert] erro stream: $e'),
-          );
-
-      dev.log('[NearbyAlert] iniciado — userId=$userId raio=${alertRadiusKm}km');
-    } catch (e, st) {
-      dev.log('[NearbyAlert] falha ao inicializar: $e', stackTrace: st);
+  Future<void> initialize(String userId) {
+    if (_user == userId && (_sub != null || _initializing != null)) {
+      return _initializing ?? Future.value();
     }
-  }
-
-  /// Para a escuta e limpa o estado.
-  Future<void> stop() async {
-    await _sub?.cancel();
+    final previous = _sub;
     _sub = null;
-    _currentUserId = null;
-    _notified.clear();
+    _user = userId;
+    final generation = ++_generation;
+    final future = _start(userId, generation, previous);
+    _initializing = future;
+    return future;
   }
 
-  // ── Processamento do snapshot ─────────────────────────────────────────────
-
-  void _onSnapshot(
-    QuerySnapshot<Map<String, dynamic>> snap,
-    String userId,
-    List<PropertyModel> properties,
-    double alertRadiusKm,
-  ) {
-    dev.log('[NearbyAlert] snapshot: ${snap.docChanges.length} mudança(s)');
-
-    for (final change in snap.docChanges) {
-      if (change.type == DocumentChangeType.removed) continue;
-
-      final data = change.doc.data();
-      if (data == null) continue;
-
-      final occId = change.doc.id;
-      if (_notified.contains(occId)) continue;
-
-      final reportedBy = data['reportedBy'] as String? ?? '';
-      if (reportedBy == userId) {
-        dev.log('[NearbyAlert] ignorado (própria ocorrência): $occId');
-        continue;
-      }
-
-      final rawDiag = data['diagnosis'];
-      if (rawDiag == null) continue;
-
-      DiagnosisModel diagnosis;
-      try {
-        diagnosis =
-            DiagnosisModel.fromMap(Map<String, dynamic>.from(rawDiag as Map));
-      } catch (_) {
-        continue;
-      }
-      if (diagnosis.isHealthy) continue;
-
-      final occLat = (data['latitude'] as num?)?.toDouble();
-      final occLng = (data['longitude'] as num?)?.toDouble();
-      if (occLat == null || occLng == null) continue;
-
-      // Verifica raio. Se o usuário não tem propriedades, notifica mesmo assim.
-      double? closestKm;
-      if (properties.isNotEmpty) {
-        for (final prop in properties) {
-          final d = _haversineKm(prop.latitude, prop.longitude, occLat, occLng);
-          if (closestKm == null || d < closestKm) closestKm = d;
-        }
-        if (closestKm == null || closestKm > alertRadiusKm) continue;
-      }
-
-      _notified.add(occId);
-
-      final distStr = closestKm == null
-          ? 'na sua região'
-          : closestKm < 1
-              ? 'a ${(closestKm * 1000).toStringAsFixed(0)} m da sua propriedade'
-              : 'a ${closestKm.toStringAsFixed(1)} km da sua propriedade';
-
-      _saveNotification(
-        userId: userId,
-        occId: occId,
-        title: '${diagnosis.pestName} detectada próximo a você',
-        body: 'Risco ${diagnosis.riskLevel} — $distStr.',
-        occLat: occLat,
-        occLng: occLng,
-      );
-    }
+  Future<void> _start(
+    String uid,
+    int generation,
+    StreamSubscription<List<OccurrenceModel>>? previous,
+  ) async {
+    await previous?.cancel();
+    if (_generation != generation || _user != uid) return;
+    final since = now().subtract(
+      const Duration(days: AppConstants.nearbyAlertMaxAgeDays),
+    );
+    _sub = watchOccurrences(since).listen((items) {
+      unawaited(_process(uid, items, generation));
+    }, onError: (Object _) => dev.log('[NearbyAlert] consulta indisponível'));
+    if (_generation == generation) _initializing = null;
   }
 
-  Future<void> _saveNotification({
-    required String userId,
-    required String occId,
-    required String title,
-    required String body,
-    required double occLat,
-    required double occLng,
-  }) async {
+  Future<List<String>> check(String uid) async {
     try {
-      await _firestore
-          .collection('notifications')
-          .doc(userId)
-          .collection('items')
-          .add({
-        'title': title,
-        'body': body,
-        'receivedAt': FieldValue.serverTimestamp(),
-        'read': false,
-        'occurrenceId': occId,
-        'latitude': occLat,
-        'longitude': occLng,
-      });
-      dev.log('[NearbyAlert] notificação salva: $title');
-    } catch (e) {
-      dev.log('[NearbyAlert] erro ao salvar: $e');
-      _notified.remove(occId); // permite nova tentativa
+      await initialize(uid);
+      final generation = _generation;
+      final items = await loadOccurrences(
+        now().subtract(
+          const Duration(days: AppConstants.nearbyAlertMaxAgeDays),
+        ),
+      );
+      return await _process(uid, items, generation);
+    } catch (_) {
+      return ['Não foi possível consultar ocorrências próximas.'];
     }
   }
 
-  // ── Haversine ─────────────────────────────────────────────────────────────
-
-  static double _haversineKm(
-      double lat1, double lon1, double lat2, double lon2) {
-    const r = 6371.0;
-    final dLat = _rad(lat2 - lat1);
-    final dLon = _rad(lon2 - lon1);
-    final a = sin(dLat / 2) * sin(dLat / 2) +
-        cos(_rad(lat1)) * cos(_rad(lat2)) * sin(dLon / 2) * sin(dLon / 2);
-    return r * 2 * atan2(sqrt(a), sqrt(1 - a));
+  Future<List<String>> _process(
+    String uid,
+    List<OccurrenceModel> items,
+    int generation,
+  ) async {
+    bool active() =>
+        generation == _generation &&
+        _user == uid &&
+        dispatcher.activeUser() == uid;
+    try {
+      if (!active()) return [];
+      final settings =
+          await loadSettings(uid) ?? UserSettingsModel(userId: uid);
+      if (!settings.notificationsEnabled) return [];
+      final properties = await loadProperties(uid);
+      for (final item in items) {
+        if (!active()) break;
+        final currentSettings = await loadSettings(uid) ?? settings;
+        if (!currentSettings.notificationsEnabled || !active()) break;
+        final alert = nearbyCandidate(
+          userId: uid,
+          settings: currentSettings,
+          properties: properties,
+          occurrence: item,
+          now: now(),
+        );
+        if (alert != null) {
+          await dispatcher.emit(uid, alert, stillActive: active);
+        }
+      }
+      return [];
+    } catch (_) {
+      return ['Não foi possível registrar os alertas próximos.'];
+    }
   }
 
-  static double _rad(double deg) => deg * pi / 180;
+  Future<void> stop() async {
+    _generation++;
+    _user = null;
+    final sub = _sub;
+    _sub = null;
+    _initializing = null;
+    await sub?.cancel();
+  }
+
+  static bool isRecentForAlert(
+    DateTime timestamp,
+    DateTime now, {
+    int maxAgeDays = AppConstants.nearbyAlertMaxAgeDays,
+  }) =>
+      !timestamp.isAfter(now) &&
+      !timestamp.isBefore(now.subtract(Duration(days: maxAgeDays)));
 }

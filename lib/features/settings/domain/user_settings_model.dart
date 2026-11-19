@@ -14,17 +14,18 @@ class UserSettingsModel {
   });
 
   Map<String, dynamic> toMap() => {
-        'userId': userId,
-        'fcmToken': fcmToken,
-        'alertRadiusKm': alertRadiusKm,
-        'notificationsEnabled': notificationsEnabled,
-      };
+    'userId': userId,
+    // Preferências não sobrescrevem um token rotacionado em paralelo.
+    'alertRadiusKm': alertRadiusKm,
+    'notificationsEnabled': notificationsEnabled,
+  };
 
   factory UserSettingsModel.fromMap(Map<String, dynamic> map) =>
       UserSettingsModel(
         userId: map['userId'] ?? '',
         fcmToken: map['fcmToken'] as String?,
-        alertRadiusKm: (map['alertRadiusKm'] ?? AppConstants.alertRadiusDefault).toDouble(),
+        alertRadiusKm: (map['alertRadiusKm'] ?? AppConstants.alertRadiusDefault)
+            .toDouble(),
         notificationsEnabled: map['notificationsEnabled'] ?? true,
       );
 
@@ -32,11 +33,10 @@ class UserSettingsModel {
     String? fcmToken,
     double? alertRadiusKm,
     bool? notificationsEnabled,
-  }) =>
-      UserSettingsModel(
-        userId: userId,
-        fcmToken: fcmToken ?? this.fcmToken,
-        alertRadiusKm: alertRadiusKm ?? this.alertRadiusKm,
-        notificationsEnabled: notificationsEnabled ?? this.notificationsEnabled,
-      );
+  }) => UserSettingsModel(
+    userId: userId,
+    fcmToken: fcmToken ?? this.fcmToken,
+    alertRadiusKm: alertRadiusKm ?? this.alertRadiusKm,
+    notificationsEnabled: notificationsEnabled ?? this.notificationsEnabled,
+  );
 }

@@ -6,6 +6,13 @@ import '../../../../core/theme/app_text_styles.dart';
 import '../../../../core/theme/app_spacing.dart';
 import '../../../../core/utils/date_formatter.dart';
 import '../../../../services/auth_service.dart';
+import '../../../../services/database_service.dart';
+import '../../../../services/nearby_alert_service.dart';
+import '../../../../services/notification_service.dart';
+import '../../../favorability/data/environmental_alert_service.dart';
+import '../../../settings/domain/user_settings_model.dart';
+import 'nearby_demo_screen.dart';
+import 'notification_detail_screen.dart';
 import '../../data/notification_repository.dart';
 import '../../domain/app_notification_model.dart';
 
@@ -18,6 +25,65 @@ class NotificationsScreen extends StatefulWidget {
 
 class _NotificationsScreenState extends State<NotificationsScreen> {
   final _repo = NotificationRepository();
+  bool _checking = false;
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) _check();
+    });
+  }
+
+  Future<void> _check({bool force = false}) async {
+    if (_checking) return;
+    final uid = context.read<AuthService>().currentUser?.uid;
+    if (uid == null) return;
+    setState(() => _checking = true);
+    final results = await Future.wait([
+      context.read<NearbyAlertService>().check(uid),
+      context.read<EnvironmentalAlertService>().run(uid, force: force),
+    ]);
+    if (!mounted) return;
+    setState(() => _checking = false);
+    final errors = results.expand((e) => e).toList();
+    if (errors.isNotEmpty) {
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(errors.join('\n'))));
+    }
+  }
+
+  Future<void> _demo() async {
+    final uid = context.read<AuthService>().currentUser?.uid;
+    if (uid == null) return;
+    try {
+      final settings =
+          await context.read<DatabaseService>().getUserSettings(uid) ??
+          UserSettingsModel(userId: uid);
+      if (!mounted) return;
+      final notifications = context.read<NotificationService>();
+      Navigator.of(context).push(
+        MaterialPageRoute<void>(
+          builder: (_) => NearbyDemoScreen(
+            radiusKm: settings.alertRadiusKm,
+            enabled: settings.notificationsEnabled,
+            showLocal: (alert) => notifications.showAlert(uid, alert),
+          ),
+        ),
+      );
+    } catch (_) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text(
+              'Não foi possível carregar o raio configurado. Tente novamente.',
+            ),
+          ),
+        );
+      }
+    }
+  }
 
   Future<void> _markAllRead(String userId) async {
     await _repo.markAllRead(userId);
@@ -32,12 +98,23 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
       appBar: AppBar(
         title: const Text('Notificações'),
         actions: [
+          IconButton(
+            tooltip: 'Demonstrar ocorrência próxima',
+            onPressed: _demo,
+            icon: const Icon(Icons.science_outlined),
+          ),
+          IconButton(
+            tooltip: 'Verificar alertas agora',
+            onPressed: _checking ? null : () => _check(force: true),
+            icon: const Icon(Icons.refresh),
+          ),
           TextButton(
             onPressed: () => _markAllRead(userId),
             child: Text(
               'Marcar todas',
-              style: AppTextStyles.labelMedium
-                  .copyWith(color: AppColors.onPrimary),
+              style: AppTextStyles.labelMedium.copyWith(
+                color: AppColors.onPrimary,
+              ),
             ),
           ),
         ],
@@ -66,17 +143,24 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  Icon(Icons.notifications_none_rounded,
-                      size: 56, color: AppColors.textHint),
+                  Icon(
+                    Icons.notifications_none_rounded,
+                    size: 56,
+                    color: AppColors.textHint,
+                  ),
                   const SizedBox(height: AppSpacing.md),
-                  Text('Nenhuma notificação ainda',
-                      style: AppTextStyles.titleSmall
-                          .copyWith(color: AppColors.textSecondary)),
+                  Text(
+                    'Nenhuma notificação ainda',
+                    style: AppTextStyles.titleSmall.copyWith(
+                      color: AppColors.textSecondary,
+                    ),
+                  ),
                   const SizedBox(height: AppSpacing.sm),
                   Text(
-                    'Quando uma praga for detectada\nna sua região, você será avisado.',
-                    style: AppTextStyles.bodySmall
-                        .copyWith(color: AppColors.textHint),
+                    'A verificação ocorre ao abrir ou retomar o app\ne ao acessar os alertas. Requer conexão.',
+                    style: AppTextStyles.bodySmall.copyWith(
+                      color: AppColors.textHint,
+                    ),
                     textAlign: TextAlign.center,
                   ),
                 ],
@@ -86,12 +170,23 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
 
           return ListView.separated(
             padding: const EdgeInsets.symmetric(
-                horizontal: AppSpacing.screenH, vertical: AppSpacing.md),
+              horizontal: AppSpacing.screenH,
+              vertical: AppSpacing.md,
+            ),
             itemCount: items.length,
             separatorBuilder: (_, _) => const SizedBox(height: AppSpacing.sm),
             itemBuilder: (_, i) => _NotifCard(
               notif: items[i],
-              onTap: () => _repo.markRead(userId, items[i].id),
+              onTap: () async {
+                await _repo.markRead(userId, items[i].id);
+                if (!context.mounted) return;
+                Navigator.of(context).push(
+                  MaterialPageRoute<void>(
+                    builder: (_) =>
+                        NotificationDetailScreen(notification: items[i]),
+                  ),
+                );
+              },
             ),
           );
         },
@@ -120,7 +215,9 @@ class _NotifCard extends StatelessWidget {
           color: unread ? AppColors.riskHighContainer : AppColors.surface,
           borderRadius: BorderRadius.circular(AppSpacing.radiusMd),
           border: Border.all(
-            color: unread ? AppColors.riskHigh.withValues(alpha: 0.3) : AppColors.border,
+            color: unread
+                ? AppColors.riskHigh.withValues(alpha: 0.3)
+                : AppColors.border,
             width: 0.8,
           ),
         ),
@@ -138,7 +235,11 @@ class _NotifCard extends StatelessWidget {
                 borderRadius: BorderRadius.circular(AppSpacing.radiusSm),
               ),
               child: Icon(
-                Icons.pest_control_rounded,
+                // Alertas preventivos (favorabilidade) têm ícone próprio;
+                // os de proximidade mantêm o ícone original.
+                notif.isPreventive
+                    ? Icons.thermostat_rounded
+                    : Icons.pest_control_rounded,
                 color: unread ? AppColors.riskHigh : AppColors.textHint,
                 size: 22,
               ),
@@ -158,8 +259,9 @@ class _NotifCard extends StatelessWidget {
                           notif.title,
                           style: AppTextStyles.titleSmall.copyWith(
                             color: AppColors.textPrimary,
-                            fontWeight:
-                                unread ? FontWeight.w700 : FontWeight.w500,
+                            fontWeight: unread
+                                ? FontWeight.w700
+                                : FontWeight.w500,
                           ),
                         ),
                       ),
@@ -179,14 +281,23 @@ class _NotifCard extends StatelessWidget {
                   const SizedBox(height: 3),
                   Text(
                     notif.body,
-                    style: AppTextStyles.bodySmall
-                        .copyWith(color: AppColors.textSecondary),
+                    maxLines: 3,
+                    overflow: TextOverflow.ellipsis,
+                    style: AppTextStyles.bodySmall.copyWith(
+                      color: AppColors.textSecondary,
+                    ),
                   ),
                   const SizedBox(height: AppSpacing.xs),
                   Text(
+                    '${notif.simulated ? 'DEMONSTRAÇÃO · ' : ''}${notif.isPreventive ? 'Favorabilidade experimental' : 'Ocorrência próxima'}'
+                    '${notif.region == null ? '' : ' · ${notif.region}'}',
+                    style: AppTextStyles.caption,
+                  ),
+                  Text(
                     DateFormatter.format(notif.receivedAt),
-                    style: AppTextStyles.caption
-                        .copyWith(color: AppColors.textHint),
+                    style: AppTextStyles.caption.copyWith(
+                      color: AppColors.textHint,
+                    ),
                   ),
                 ],
               ),

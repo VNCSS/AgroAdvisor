@@ -34,6 +34,11 @@ class AppConstants {
   /// Raio padrão ao criar um novo usuário (km).
   static const double alertRadiusDefault = 20.0;
 
+  /// Idade máxima (dias) de uma ocorrência para gerar alerta de proximidade.
+  /// Evita notificar todo o histórico da região no primeiro login.
+  /// Valor de projeto.
+  static const int nearbyAlertMaxAgeDays = 7;
+
   /// Número de divisões do Slider de raio na tela de configurações.
   static const int alertRadiusSliderDivisions = 19;
 
@@ -58,10 +63,42 @@ class AppConstants {
   /// A chave é passada como query param ?key=... (diferente do Claude,
   /// que usa header 'x-api-key').
   static const String geminiEndpoint =
-      'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent';
+      'https://generativelanguage.googleapis.com/v1beta/models/gemini-3.8-flash:generateContent';
 
   /// Timeout para chamadas à API de IA (segundos).
   static const int aiTimeoutSeconds = 30;
+
+  // ─── Clima / Open-Meteo ──────────────────────────────────────────────────────
+
+  /// Endpoint de previsão do Open-Meteo (sem chave de API).
+  /// Uso gratuito não comercial; exige atribuição "Open-Meteo.com" (CC BY 4.0).
+  static const String openMeteoEndpoint = 'https://api.open-meteo.com/v1/forecast';
+
+  /// Timeout para chamadas à API meteorológica (segundos).
+  static const int weatherTimeoutSeconds = 15;
+
+  /// Validade do cache em memória da previsão (minutos).
+  /// Valor de projeto: a previsão do Open-Meteo é atualizada em intervalos de horas.
+  static const int weatherCacheMinutes = 60;
+
+  /// Quantidade de dias de previsão solicitados.
+  static const int weatherForecastDays = 7;
+
+  /// Casas decimais das coordenadas enviadas à API (2 casas ≈ 1,1 km).
+  /// Reduz a precisão exposta a terceiros e permite reaproveitar o cache.
+  static const int weatherCoordinateDecimals = 2;
+
+  // ─── Dashboard da propriedade ────────────────────────────────────────────────
+
+  /// Janela de ocorrências regionais considerada no dashboard (dias).
+  /// Valor de projeto; múltiplo de 7 para a distribuição semanal.
+  static const int dashboardWindowDays = 28;
+
+  /// Quantas ocorrências recentes são listadas no dashboard.
+  static const int dashboardRecentCount = 3;
+
+  /// Quantos organismos aparecem no ranking "mais registrados".
+  static const int dashboardTopOrganisms = 5;
 
   // ─── Firestore — nomes das coleções ──────────────────────────────────────────
 
