@@ -86,12 +86,18 @@ class _OccurrenceRadarScreenState extends State<OccurrenceRadarScreen> {
       context: context,
       backgroundColor: Colors.transparent,
       isScrollControlled: true,
-      builder: (_) => _OccurrencePopup(
-        pestName: diag.pestName,
-        riskLabel: riskLabel,
-        riskColor: riskColor,
-        description: diag.description,
-        imageProvider: imageProvider,
+      useSafeArea: true,
+      builder: (_) => SafeArea(
+        top: false,
+        left: false,
+        right: false,
+        child: _OccurrencePopup(
+          pestName: diag.pestName,
+          riskLabel: riskLabel,
+          riskColor: riskColor,
+          description: diag.description,
+          imageProvider: imageProvider,
+        ),
       ),
     );
   }

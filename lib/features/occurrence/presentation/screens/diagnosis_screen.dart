@@ -1,28 +1,76 @@
 import 'package:flutter/material.dart';
+import 'package:share_plus/share_plus.dart';
 
 import '../../../../core/theme/app_colors.dart';
 import '../../../../core/theme/app_text_styles.dart';
 import '../../../../core/theme/app_spacing.dart';
 import '../../../../core/utils/date_formatter.dart';
 import '../../domain/diagnosis_model.dart';
+import '../diagnosis_pdf.dart';
 
 /// Relatório completo do diagnóstico de IA.
 /// Layout baseado no protótipo: risco em destaque, confiança circular, cards de contexto.
-class DiagnosisScreen extends StatelessWidget {
+class DiagnosisScreen extends StatefulWidget {
   final DiagnosisModel diagnosis;
   const DiagnosisScreen({super.key, required this.diagnosis});
 
   @override
+  State<DiagnosisScreen> createState() => _DiagnosisScreenState();
+}
+
+class _DiagnosisScreenState extends State<DiagnosisScreen> {
+  bool _sharing = false;
+
+  Future<void> _sharePdf(BuildContext buttonContext) async {
+    final box = buttonContext.findRenderObject() as RenderBox;
+    final origin = box.localToGlobal(Offset.zero) & box.size;
+    setState(() => _sharing = true);
+
+    try {
+      final bytes = await buildDiagnosisPdf(widget.diagnosis);
+      if (!mounted || ModalRoute.of(context)?.isCurrent != true) return;
+
+      await SharePlus.instance.share(
+        ShareParams(
+          title: 'Relatório de diagnóstico',
+          files: [XFile.fromData(bytes, mimeType: 'application/pdf')],
+          fileNameOverrides: ['relatorio-diagnostico-agroadvisor.pdf'],
+          sharePositionOrigin: origin,
+        ),
+      );
+    } catch (error) {
+      if (!mounted || ModalRoute.of(context)?.isCurrent != true) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+            'Não foi possível compartilhar o PDF. Tente novamente.',
+          ),
+        ),
+      );
+    } finally {
+      if (mounted) setState(() => _sharing = false);
+    }
+  }
+
+  @override
   Widget build(BuildContext context) {
+    final diagnosis = widget.diagnosis;
     return Scaffold(
       backgroundColor: AppColors.background,
       appBar: AppBar(
         title: const Text('Diagnóstico'),
         actions: [
-          IconButton(
-            icon: const Icon(Icons.share_outlined),
-            onPressed: () {},
-            tooltip: 'Compartilhar',
+          Builder(
+            builder: (buttonContext) => IconButton(
+              icon: _sharing
+                  ? const SizedBox.square(
+                      dimension: 20,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    )
+                  : const Icon(Icons.share_outlined),
+              onPressed: _sharing ? null : () => _sharePdf(buttonContext),
+              tooltip: 'Compartilhar PDF',
+            ),
           ),
         ],
       ),
@@ -95,16 +143,19 @@ class _RiskBanner extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final (color, label, icon) = switch (riskLevel.toLowerCase()) {
-      'alto'             => (AppColors.riskHigh,   'RISCO ALTO',       Icons.warning_rounded),
-      'médio' || 'medio' => (AppColors.riskMedium, 'RISCO MÉDIO',      Icons.warning_amber_rounded),
-      'baixo'            => (AppColors.riskLow,    'RISCO BAIXO',      Icons.check_circle_outline_rounded),
-      _                  => (AppColors.textHint,   'RISCO DESCONHECIDO', Icons.help_outline_rounded),
+    final (color, icon) = switch (riskLevel.toLowerCase()) {
+      'alto' => (AppColors.riskHigh, Icons.warning_rounded),
+      'médio' || 'medio' => (AppColors.riskMedium, Icons.warning_amber_rounded),
+      'baixo' => (AppColors.riskLow, Icons.check_circle_outline_rounded),
+      _ => (AppColors.textHint, Icons.help_outline_rounded),
     };
 
     return Container(
       width: double.infinity,
-      padding: const EdgeInsets.symmetric(horizontal: AppSpacing.md, vertical: 14),
+      padding: const EdgeInsets.symmetric(
+        horizontal: AppSpacing.md,
+        vertical: 14,
+      ),
       decoration: BoxDecoration(
         color: color.withValues(alpha: 0.08),
         borderRadius: BorderRadius.circular(AppSpacing.radiusMd),
@@ -115,7 +166,7 @@ class _RiskBanner extends StatelessWidget {
           Icon(icon, color: color, size: 32),
           const SizedBox(width: AppSpacing.md),
           Text(
-            label,
+            diagnosisRiskLabel(riskLevel).toUpperCase(),
             style: AppTextStyles.headlineMedium.copyWith(
               color: color,
               letterSpacing: 0.5,
@@ -130,7 +181,10 @@ class _RiskBanner extends StatelessWidget {
 class _DiagnosisHeader extends StatelessWidget {
   final String pestName;
   final double confidenceScore;
-  const _DiagnosisHeader({required this.pestName, required this.confidenceScore});
+  const _DiagnosisHeader({
+    required this.pestName,
+    required this.confidenceScore,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -138,8 +192,8 @@ class _DiagnosisHeader extends StatelessWidget {
     final color = confidenceScore >= 0.7
         ? AppColors.riskLow
         : confidenceScore >= 0.4
-            ? AppColors.riskMedium
-            : AppColors.riskHigh;
+        ? AppColors.riskMedium
+        : AppColors.riskHigh;
 
     return Container(
       padding: const EdgeInsets.all(AppSpacing.md),
@@ -156,8 +210,10 @@ class _DiagnosisHeader extends StatelessWidget {
               children: [
                 Text(
                   'DIAGNÓSTICO PRINCIPAL',
-                  style: AppTextStyles.labelSmall
-                      .copyWith(color: AppColors.textHint, letterSpacing: 0.8),
+                  style: AppTextStyles.labelSmall.copyWith(
+                    color: AppColors.textHint,
+                    letterSpacing: 0.8,
+                  ),
                 ),
                 const SizedBox(height: 4),
                 Text(pestName, style: AppTextStyles.headlineSmall),
@@ -179,8 +235,10 @@ class _DiagnosisHeader extends StatelessWidget {
                 ),
                 Text(
                   '$pct%',
-                  style: AppTextStyles.titleSmall
-                      .copyWith(color: color, fontWeight: FontWeight.w800),
+                  style: AppTextStyles.titleSmall.copyWith(
+                    color: color,
+                    fontWeight: FontWeight.w800,
+                  ),
                 ),
               ],
             ),
@@ -207,9 +265,13 @@ class _DetectedIssues extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text('OUTRAS HIPÓTESES',
-              style: AppTextStyles.labelSmall
-                  .copyWith(color: AppColors.textHint, letterSpacing: 0.8)),
+          Text(
+            'OUTRAS HIPÓTESES',
+            style: AppTextStyles.labelSmall.copyWith(
+              color: AppColors.textHint,
+              letterSpacing: 0.8,
+            ),
+          ),
           const SizedBox(height: AppSpacing.sm),
           ...issues.map(
             (issue) => Padding(
@@ -226,9 +288,12 @@ class _DetectedIssues extends StatelessWidget {
                   ),
                   const SizedBox(width: AppSpacing.sm),
                   Expanded(
-                    child: Text(issue,
-                        style: AppTextStyles.bodyMedium
-                            .copyWith(color: AppColors.textPrimary)),
+                    child: Text(
+                      issue,
+                      style: AppTextStyles.bodyMedium.copyWith(
+                        color: AppColors.textPrimary,
+                      ),
+                    ),
                   ),
                 ],
               ),
@@ -264,10 +329,7 @@ class _InfoCard extends StatelessWidget {
       decoration: BoxDecoration(
         color: bgColor,
         borderRadius: BorderRadius.circular(AppSpacing.radiusMd),
-        border: Border.all(
-          color: borderColor ?? AppColors.border,
-          width: 0.8,
-        ),
+        border: Border.all(color: borderColor ?? AppColors.border, width: 0.8),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -276,15 +338,23 @@ class _InfoCard extends StatelessWidget {
             children: [
               Icon(icon, size: 18, color: iconColor),
               const SizedBox(width: AppSpacing.sm),
-              Text(title,
-                  style: AppTextStyles.titleSmall
-                      .copyWith(color: AppColors.textPrimary, fontWeight: FontWeight.w700)),
+              Text(
+                title,
+                style: AppTextStyles.titleSmall.copyWith(
+                  color: AppColors.textPrimary,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
             ],
           ),
           const SizedBox(height: AppSpacing.sm),
-          Text(content,
-              style: AppTextStyles.bodyMedium
-                  .copyWith(color: AppColors.textPrimary, height: 1.6)),
+          Text(
+            content,
+            style: AppTextStyles.bodyMedium.copyWith(
+              color: AppColors.textPrimary,
+              height: 1.6,
+            ),
+          ),
         ],
       ),
     );
@@ -303,12 +373,18 @@ class _DisclaimerBanner extends StatelessWidget {
       ),
       child: Row(
         children: [
-          const Icon(Icons.info_outline_rounded, color: Color(0xFFF57C00), size: 18),
+          const Icon(
+            Icons.info_outline_rounded,
+            color: Color(0xFFF57C00),
+            size: 18,
+          ),
           const SizedBox(width: AppSpacing.sm),
           Expanded(
             child: Text(
-              'Diagnóstico informativo. Consulte um engenheiro agrônomo para avaliação definitiva.',
-              style: AppTextStyles.bodySmall.copyWith(color: AppColors.textPrimary),
+              diagnosisDisclaimer,
+              style: AppTextStyles.bodySmall.copyWith(
+                color: AppColors.textPrimary,
+              ),
             ),
           ),
         ],
