@@ -48,15 +48,10 @@ Regras:
         },
       ],
       'generationConfig': {
-        'temperature': 0.2,
-        'maxOutputTokens': 1024,
-        'topP': 0.8,
+        'maxOutputTokens': 4096,
         'responseMimeType': 'application/json',
-        // Desativa o raciocínio interno (thinking) do gemini-2.5-flash.
-        // Sem isso, o modelo consome tokens "pensando" antes de responder,
-        // deixando poucos tokens para o JSON e causando resposta truncada.
         'thinkingConfig': {
-          'thinkingBudget': 0,
+          'thinkingLevel': 'low',
         },
       },
     });

@@ -63,7 +63,7 @@ class AppConstants {
   /// A chave é passada como query param ?key=... (diferente do Claude,
   /// que usa header 'x-api-key').
   static const String geminiEndpoint =
-      'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent';
+      'https://generativelanguage.googleapis.com/v1beta/models/gemini-3.8-flash:generateContent';
 
   /// Timeout para chamadas à API de IA (segundos).
   static const int aiTimeoutSeconds = 30;
