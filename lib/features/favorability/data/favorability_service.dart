@@ -2,6 +2,7 @@ import '../../occurrence/domain/occurrence_model.dart';
 import '../../property/domain/property_model.dart';
 import '../../weather/domain/weather_result.dart';
 import '../domain/favorability_engine.dart';
+import '../domain/experimental_profile.dart';
 import '../domain/favorability_result.dart';
 import '../domain/regional_occurrence.dart';
 import '../domain/scientific_rule_catalog.dart';
@@ -23,7 +24,7 @@ class FavorabilityService {
   final FavorabilityEngine engine;
   final ScientificRuleRepository rules;
   final Future<List<OccurrenceModel>> Function(DateTime since)
-      loadOccurrencesSince;
+  loadOccurrencesSince;
   final Future<WeatherResult> Function(PropertyModel property) loadForecast;
   final DateTime Function() _now;
 
@@ -50,10 +51,13 @@ class FavorabilityService {
     final now = _now();
     final runEngine = radiusKm == null
         ? engine
-        : engine.withConfig(engine.config.copyWith(
-            occurrences:
-                engine.config.occurrences.copyWith(radiusKm: radiusKm),
-          ));
+        : engine.withConfig(
+            engine.config.copyWith(
+              occurrences: engine.config.occurrences.copyWith(
+                radiusKm: radiusKm,
+              ),
+            ),
+          );
 
     // Future.wait repassa o erro original (o record.wait o embrulharia).
     final results = await Future.wait<Object>([
@@ -78,6 +82,32 @@ class FavorabilityService {
           .toList(),
       catalog: catalog,
       forecast: forecast,
+      forecastIsStale: weather is WeatherSuccess && weather.isStale,
+      now: now,
+    );
+  }
+
+  /// Leitura real; falha de consulta regional não equivale a zero registros.
+  Future<ExperimentalAssessment> assessExperimental(
+    PropertyModel property,
+  ) async {
+    final now = _now();
+    final results = await Future.wait<Object?>([
+      loadOccurrencesSince(
+        occurrencesSince(now),
+      ).then<Object?>((v) => v, onError: (Object _) => null),
+      loadForecast(
+        property,
+      ).then<Object?>((v) => v, onError: (Object _) => null),
+    ]);
+    final weather = results[1];
+    return engine.assessExperimental(
+      property: PropertyContext.fromProperty(property),
+      occurrences: (results[0] as List<OccurrenceModel>?)
+          ?.map(RegionalOccurrence.fromOccurrence)
+          .whereType<RegionalOccurrence>()
+          .toList(),
+      forecast: weather is WeatherSuccess ? weather.forecast : null,
       forecastIsStale: weather is WeatherSuccess && weather.isStale,
       now: now,
     );

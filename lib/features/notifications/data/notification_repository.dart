@@ -6,7 +6,7 @@ class NotificationRepository {
   final FirebaseFirestore _db;
 
   NotificationRepository({FirebaseFirestore? db})
-      : _db = db ?? FirebaseFirestore.instance;
+    : _db = db ?? FirebaseFirestore.instance;
 
   CollectionReference<Map<String, dynamic>> _col(String userId) =>
       _db.collection('notifications').doc(userId).collection('items');
@@ -16,9 +16,12 @@ class NotificationRepository {
     return _col(userId)
         .orderBy('receivedAt', descending: true)
         .snapshots()
-        .map((snap) => snap.docs
-            .map((d) => AppNotificationModel.fromMap(d.data(), d.id))
-            .toList());
+        .map(
+          (snap) => snap.docs
+              .where((d) => d.data()['type'] != '_internal')
+              .map((d) => AppNotificationModel.fromMap(d.data(), d.id))
+              .toList(),
+        );
   }
 
   /// Stream com a contagem de notificações não lidas.

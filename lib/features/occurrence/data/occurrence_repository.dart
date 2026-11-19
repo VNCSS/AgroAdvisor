@@ -12,7 +12,7 @@ class OccurrenceRepository {
   final FirebaseFirestore _db;
 
   OccurrenceRepository({FirebaseFirestore? db})
-      : _db = db ?? FirebaseFirestore.instance;
+    : _db = db ?? FirebaseFirestore.instance;
 
   CollectionReference<Map<String, dynamic>> get _col =>
       _db.collection(AppConstants.colOccurrences);
@@ -33,24 +33,23 @@ class OccurrenceRepository {
     return _col
         .orderBy('timestamp', descending: true)
         .snapshots()
-        .map((snap) => snap.docs
-            .map((d) => OccurrenceModel.fromMap(d.data(), d.id))
-            .toList());
+        .map(
+          (snap) => snap.docs
+              .map((d) => OccurrenceModel.fromMap(d.data(), d.id))
+              .toList(),
+        );
   }
 
   /// Stream em tempo real das ocorrências de um usuário específico.
   /// Ordenação feita no cliente para evitar exigência de índice composto no Firestore.
   Stream<List<OccurrenceModel>> watchByUser(String userId) {
-    return _col
-        .where('reportedBy', isEqualTo: userId)
-        .snapshots()
-        .map((snap) {
-          final list = snap.docs
-              .map((d) => OccurrenceModel.fromMap(d.data(), d.id))
-              .toList();
-          list.sort((a, b) => b.timestamp.compareTo(a.timestamp));
-          return list;
-        });
+    return _col.where('reportedBy', isEqualTo: userId).snapshots().map((snap) {
+      final list = snap.docs
+          .map((d) => OccurrenceModel.fromMap(d.data(), d.id))
+          .toList();
+      list.sort((a, b) => b.timestamp.compareTo(a.timestamp));
+      return list;
+    });
   }
 
   /// Leitura única das ocorrências registradas a partir de [since]
@@ -65,6 +64,16 @@ class OccurrenceRepository {
         .map((d) => OccurrenceModel.fromMap(d.data(), d.id))
         .toList();
   }
+
+  /// Escuta registros recentes, incluindo diagnósticos adicionados depois.
+  Stream<List<OccurrenceModel>> watchSince(DateTime since) => _col
+      .where('timestamp', isGreaterThanOrEqualTo: Timestamp.fromDate(since))
+      .snapshots()
+      .map(
+        (snap) => snap.docs
+            .map((d) => OccurrenceModel.fromMap(d.data(), d.id))
+            .toList(),
+      );
 
   /// Atualiza o diagnóstico de IA de uma ocorrência existente.
   Future<void> updateDiagnosis(

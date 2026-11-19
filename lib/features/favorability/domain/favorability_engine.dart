@@ -4,6 +4,7 @@ import '../../property/domain/property_model.dart';
 import '../../weather/data/weather_repository.dart';
 import '../../weather/domain/weather_forecast.dart';
 import 'favorability_config.dart';
+import 'experimental_profile.dart';
 import 'favorability_result.dart';
 import 'organism_name.dart';
 import 'pt_format.dart';
@@ -43,8 +44,8 @@ class PropertyContext {
 }
 
 /// Distância em km entre dois pontos (injetável para testes).
-typedef DistanceFn = double Function(
-    double lat1, double lng1, double lat2, double lng2);
+typedef DistanceFn =
+    double Function(double lat1, double lng1, double lat2, double lng2);
 
 /// Distância de grande círculo (haversine), em km.
 double haversineKm(double lat1, double lng1, double lat2, double lng2) {
@@ -52,8 +53,11 @@ double haversineKm(double lat1, double lng1, double lat2, double lng2) {
   double rad(double deg) => deg * math.pi / 180;
   final dLat = rad(lat2 - lat1);
   final dLng = rad(lng2 - lng1);
-  final a = math.pow(math.sin(dLat / 2), 2) +
-      math.cos(rad(lat1)) * math.cos(rad(lat2)) * math.pow(math.sin(dLng / 2), 2);
+  final a =
+      math.pow(math.sin(dLat / 2), 2) +
+      math.cos(rad(lat1)) *
+          math.cos(rad(lat2)) *
+          math.pow(math.sin(dLng / 2), 2);
   return 2 * earthRadiusKm * math.asin(math.min(1.0, math.sqrt(a)));
 }
 
@@ -97,23 +101,28 @@ class FavorabilityEngine {
       if (forecast != null && forecastIsStale) ReportWarning.forecastStale,
     ];
 
-    FavorabilityReport report(ReportStatus status,
-            {OccurrenceScreening screening = OccurrenceScreening.empty,
-            List<OrganismAssessment> organisms = const []}) =>
-        FavorabilityReport(
-          propertyId: property.id,
-          crop: crop,
-          generatedAt: now,
-          status: status,
-          warnings: warnings,
-          screening: screening,
-          organisms: organisms,
-        );
+    FavorabilityReport report(
+      ReportStatus status, {
+      OccurrenceScreening screening = OccurrenceScreening.empty,
+      List<OrganismAssessment> organisms = const [],
+    }) => FavorabilityReport(
+      propertyId: property.id,
+      crop: crop,
+      generatedAt: now,
+      status: status,
+      warnings: warnings,
+      screening: screening,
+      organisms: organisms,
+    );
 
     if (!WeatherRepository.isValidCoordinate(
-        property.latitude, property.longitude)) {
-      return report(ReportStatus.locationUnavailable,
-          screening: OccurrenceScreening.empty);
+      property.latitude,
+      property.longitude,
+    )) {
+      return report(
+        ReportStatus.locationUnavailable,
+        screening: OccurrenceScreening.empty,
+      );
     }
 
     final (accepted, screening) = _screen(property, occurrences, crop, now);
@@ -131,8 +140,11 @@ class FavorabilityEngine {
     if (assessments.isEmpty) {
       return report(ReportStatus.noRecentOccurrences, screening: screening);
     }
-    return report(ReportStatus.ok,
-        screening: screening, organisms: assessments);
+    return report(
+      ReportStatus.ok,
+      screening: screening,
+      organisms: assessments,
+    );
   }
 
   // ── 1. Cultura ────────────────────────────────────────────────────────────
@@ -140,8 +152,9 @@ class FavorabilityEngine {
   String? _cropOf(String? raw) {
     if (raw == null) return null;
     final normalized = normalizeOrganismName(raw);
-    final unspecified =
-        config.unspecifiedCropValues.map(normalizeOrganismName).toSet();
+    final unspecified = config.unspecifiedCropValues
+        .map(normalizeOrganismName)
+        .toSet();
     return unspecified.contains(normalized) ? null : raw.trim();
   }
 
@@ -173,7 +186,11 @@ class FavorabilityEngine {
         continue;
       }
       final d = _distance(
-          property.latitude, property.longitude, o.latitude, o.longitude);
+        property.latitude,
+        property.longitude,
+        o.latitude,
+        o.longitude,
+      );
       if (d > cfg.radiusKm) {
         outsideRadius++;
         continue;
@@ -192,19 +209,24 @@ class FavorabilityEngine {
         continue;
       }
       final ageDays = now.difference(o.timestamp).inMinutes / (60 * 24);
-      final weight = math.pow(0.5, ageDays / cfg.recencyHalfLifeDays) *
+      final weight =
+          math.pow(0.5, ageDays / cfg.recencyHalfLifeDays) *
           math.pow(0.5, d / cfg.distanceHalfLifeKm);
-      candidates.add(OccurrenceEvidence(
-        occurrence: o,
-        distanceKm: d,
-        ageDays: ageDays,
-        weight: weight.toDouble(),
-      ));
+      candidates.add(
+        OccurrenceEvidence(
+          occurrence: o,
+          distanceKm: d,
+          ageDays: ageDays,
+          weight: weight.toDouble(),
+        ),
+      );
     }
 
     // Duplicidade: mesmo id, ou mesmo autor + organismo muito próximos no
     // espaço e no tempo (reenvio da mesma constatação). Mantém a mais antiga.
-    candidates.sort((a, b) => a.occurrence.timestamp.compareTo(b.occurrence.timestamp));
+    candidates.sort(
+      (a, b) => a.occurrence.timestamp.compareTo(b.occurrence.timestamp),
+    );
     // Só ocorrências do mesmo autor e organismo podem ser duplicatas entre
     // si: compara dentro desse grupo, não com todas (evita custo quadrático).
     final kept = <OccurrenceEvidence>[];
@@ -215,14 +237,21 @@ class FavorabilityEngine {
       var isDuplicate = !ids.add(o.id);
       if (!isDuplicate && o.reportedBy.isNotEmpty) {
         final bucket = keptByAuthorAndOrganism.putIfAbsent(
-            '${o.reportedBy}|${normalizeOrganismName(o.organismName)}',
-            () => []);
-        isDuplicate = bucket.any((other) =>
-            o.timestamp.difference(other.timestamp).abs() <=
-                cfg.duplicateTimeWindow &&
-            _distance(other.latitude, other.longitude, o.latitude,
-                    o.longitude) <=
-                cfg.duplicateDistanceKm);
+          '${o.reportedBy}|${normalizeOrganismName(o.organismName)}',
+          () => [],
+        );
+        isDuplicate = bucket.any(
+          (other) =>
+              o.timestamp.difference(other.timestamp).abs() <=
+                  cfg.duplicateTimeWindow &&
+              _distance(
+                    other.latitude,
+                    other.longitude,
+                    o.latitude,
+                    o.longitude,
+                  ) <=
+                  cfg.duplicateDistanceKm,
+        );
         if (!isDuplicate) bucket.add(o);
       }
       if (isDuplicate) {
@@ -253,7 +282,9 @@ class FavorabilityEngine {
   /// popular, científico ou sinônimo) formam um único grupo; os demais
   /// agrupam pelo nome normalizado. O tipo informado pela IA não é usado.
   List<_OrganismGroup> _group(
-      List<OccurrenceEvidence> items, ScientificRuleCatalog catalog) {
+    List<OccurrenceEvidence> items,
+    ScientificRuleCatalog catalog,
+  ) {
     final groups = <String, _OrganismGroup>{};
     for (final e in items) {
       final lookup = catalog.lookup(e.occurrence.organismName);
@@ -280,11 +311,17 @@ class FavorabilityEngine {
     DateTime now,
   ) {
     final regional = _regionalEvidence(group.items);
-    final names = group.items.map((e) => e.occurrence.organismName.trim()).toSet();
+    final names = group.items
+        .map((e) => e.occurrence.organismName.trim())
+        .toSet();
     final displayName = group.rule?.organismName ?? _mostFrequent(group.items);
 
-    OrganismAssessment withoutIndex(AssessmentStatus status, String message,
-        List<String> reasons, EnvironmentalAssessment? environmental) {
+    OrganismAssessment withoutIndex(
+      AssessmentStatus status,
+      String message,
+      List<String> reasons,
+      EnvironmentalAssessment? environmental,
+    ) {
       return OrganismAssessment(
         organismName: displayName,
         reportedNames: names,
@@ -318,8 +355,12 @@ class FavorabilityEngine {
         RuleUnavailable(:final reasons) => reasons,
         _ => ['Nenhuma regra científica cadastrada para este organismo'],
       };
-      return withoutIndex(AssessmentStatus.insufficientScientificData,
-          insufficientScientificDataMessage, reasons, null);
+      return withoutIndex(
+        AssessmentStatus.insufficientScientificData,
+        insufficientScientificDataMessage,
+        reasons,
+        null,
+      );
     }
 
     // Cultura afetada?
@@ -334,24 +375,28 @@ class FavorabilityEngine {
     }
 
     // 7–9. Clima.
-    final factors = _evaluator.evaluate(rule,
-        forecast: forecast, now: now, cropStage: property.cropStage);
+    final factors = _evaluator.evaluate(
+      rule,
+      forecast: forecast,
+      now: now,
+      cropStage: property.cropStage,
+    );
     final environmental = _environmental(factors);
     if (environmental.score == null) {
       final missing = factors
           .where((f) => f.status == FactorStatus.notEvaluable)
           .map((f) => '${f.kind.label}: ${f.detail}')
           .toList();
-      return withoutIndex(AssessmentStatus.insufficientWeatherData,
-          insufficientWeatherDataMessage, missing, environmental);
+      return withoutIndex(
+        AssessmentStatus.insufficientWeatherData,
+        insufficientWeatherDataMessage,
+        missing,
+        environmental,
+      );
     }
 
     // 11–12. Combinação e nível.
-    final s = config.scoring;
-    final combined = (s.environmentalWeight * environmental.score! +
-            s.regionalWeight * regional.score) /
-        (s.environmentalWeight + s.regionalWeight);
-    final index = (combined * 100).round().clamp(0, 100);
+    final index = _index(environmental.score!, regional.score);
     final level = config.levels.levelFor(index);
 
     return OrganismAssessment(
@@ -384,6 +429,87 @@ class FavorabilityEngine {
     );
   }
 
+  /// Perfil genérico separado dos alertas científicos persistíveis.
+  /// null nas ocorrências indica falha de consulta, nunca ausência de risco.
+  ExperimentalAssessment assessExperimental({
+    required PropertyContext property,
+    required List<RegionalOccurrence>? occurrences,
+    required WeatherForecast? forecast,
+    required DateTime now,
+    bool simulated = false,
+    bool forecastIsStale = false,
+  }) {
+    final environmental = _environmental(
+      ExperimentalProfile.evaluate(forecast, now),
+    );
+    final validLocation = WeatherRepository.isValidCoordinate(
+      property.latitude,
+      property.longitude,
+    );
+    final regional = occurrences == null || !validLocation
+        ? null
+        : _regionalEvidence(
+            _screen(property, occurrences, _cropOf(property.crop), now).$1,
+          );
+    final enough = environmental.factors.every((f) => f.isScored);
+    final index = !enough || regional == null
+        ? null
+        : _index(environmental.score!, regional.score);
+    return ExperimentalAssessment(
+      environmental: environmental,
+      regional: regional,
+      index: index,
+      level: index == null ? null : config.levels.levelFor(index),
+      simulated: simulated,
+      generatedAt: now,
+      fetchedAt: forecast?.fetchedAt,
+      warnings: [
+        if (!validLocation)
+          'Localização inválida: evidência regional indisponível.',
+        if (regional == null)
+          'Dados regionais insuficientes; índice não calculado.',
+        if (regional?.count == 0)
+          'Nenhuma ocorrência regional recente encontrada. Isso não significa ausência de risco.',
+        if (!enough)
+          'Dados meteorológicos insuficientes ou inválidos; índice não calculado.',
+        if (forecastIsStale) 'Previsão desatualizada (cache).',
+      ],
+    );
+  }
+
+  /// Sem repositórios, gravação ou notificações.
+  ExperimentalAssessment demonstrate(DemonstrationInput input, DateTime now) =>
+      assessExperimental(
+        property: const PropertyContext(
+          id: 'demo',
+          latitude: -22,
+          longitude: -47,
+        ),
+        occurrences: [
+          if (input.regionalOccurrences)
+            for (var i = 0; i < 5; i++)
+              RegionalOccurrence(
+                id: 'demo-$i',
+                organismName: 'Registro simulado',
+                reportedBy: 'demo-$i',
+                latitude: -22,
+                longitude: -47,
+                timestamp: now,
+              ),
+        ],
+        forecast: input.forecast(now),
+        now: now,
+        simulated: true,
+      );
+
+  int _index(double environmental, double regional) {
+    final s = config.scoring;
+    final combined =
+        (s.environmentalWeight * environmental + s.regionalWeight * regional) /
+        (s.environmentalWeight + s.regionalWeight);
+    return (combined * 100).round().clamp(0, 100);
+  }
+
   // 9. Componente ambiental.
   EnvironmentalAssessment _environmental(List<FactorEvaluation> factors) {
     final s = config.scoring;
@@ -391,36 +517,45 @@ class FavorabilityEngine {
         fs.fold(0.0, (sum, f) => sum + s.weightOf(f.kind));
 
     final scored = factors.where((f) => f.isScored).toList();
-    final meteo = factors.where((f) =>
-        f.kind.meteorological && f.status != FactorStatus.informational);
+    final meteo = factors.where(
+      (f) => f.kind.meteorological && f.status != FactorStatus.informational,
+    );
     final meteoScored = meteo.where((f) => f.isScored);
     final meteoTotal = weightSum(meteo);
-    final coverage = meteoTotal == 0 ? 0.0 : weightSum(meteoScored) / meteoTotal;
+    final coverage = meteoTotal == 0
+        ? 0.0
+        : weightSum(meteoScored) / meteoTotal;
 
-    final enough = meteoScored.isNotEmpty &&
+    final enough =
+        meteoScored.isNotEmpty &&
         coverage >= config.weather.minEnvironmentalCoverage;
     final scoredWeight = weightSum(scored);
     final score = !enough || scoredWeight == 0
         ? null
         : scored.fold(0.0, (sum, f) => sum + s.weightOf(f.kind) * f.score!) /
-            scoredWeight;
+              scoredWeight;
 
     return EnvironmentalAssessment(
-        factors: factors, score: score, coverage: coverage);
+      factors: factors,
+      score: score,
+      coverage: coverage,
+    );
   }
 
   // 10. Evidência regional.
   RegionalEvidence _regionalEvidence(List<OccurrenceEvidence> items) {
     final cfg = config.occurrences;
-    final sorted = [...items]
-      ..sort((a, b) => b.occurrence.timestamp.compareTo(a.occurrence.timestamp));
+    final sorted = [
+      ...items,
+    ]..sort((a, b) => b.occurrence.timestamp.compareTo(a.occurrence.timestamp));
     final weighted = sorted.fold(0.0, (sum, e) => sum + e.weight);
     return RegionalEvidence(
       occurrences: List.unmodifiable(sorted),
       weightedCount: weighted,
       score: math.min(1.0, weighted / cfg.saturationWeightedCount),
-      withinConcentrationRadius:
-          sorted.where((e) => e.distanceKm <= cfg.concentrationRadiusKm).length,
+      withinConcentrationRadius: sorted
+          .where((e) => e.distanceKm <= cfg.concentrationRadiusKm)
+          .length,
       unknownCropCount: sorted.where((e) => e.occurrence.crop == null).length,
     );
   }
@@ -467,7 +602,9 @@ class FavorabilityEngine {
       lines.add('Regra científica: ${rule.id}$reviewed');
       for (final src in rule.sources) {
         final who = src.institution == null ? '' : ' — ${src.institution}';
-        lines.add('Fonte: ${src.title}$who${src.url == null ? '' : ' (${src.url})'}');
+        lines.add(
+          'Fonte: ${src.title}$who${src.url == null ? '' : ' (${src.url})'}',
+        );
       }
     }
 
@@ -478,19 +615,25 @@ class FavorabilityEngine {
       }
     }
 
-    lines.add('Evidência regional (raio de ${fmtNum(cfg.radiusKm)} km, '
-        'últimos ${cfg.windowDays} dias):');
+    lines.add(
+      'Evidência regional (raio de ${fmtNum(cfg.radiusKm)} km, '
+      'últimos ${cfg.windowDays} dias):',
+    );
     final n = regional.count;
     lines.add('- $n ${n == 1 ? 'ocorrência recente' : 'ocorrências recentes'}');
     if (regional.nearestKm != null) {
       lines.add('- ocorrência mais próxima: ${fmtKm(regional.nearestKm!)}');
     }
     if (regional.mostRecent != null) {
-      lines.add('- ocorrência mais recente: '
-          '${fmtDaysAgo(regional.mostRecent!.occurrence.timestamp, now)}');
+      lines.add(
+        '- ocorrência mais recente: '
+        '${fmtDaysAgo(regional.mostRecent!.occurrence.timestamp, now)}',
+      );
     }
-    lines.add('- ${regional.withinConcentrationRadius} a até '
-        '${fmtNum(cfg.concentrationRadiusKm)} km da propriedade');
+    lines.add(
+      '- ${regional.withinConcentrationRadius} a até '
+      '${fmtNum(cfg.concentrationRadiusKm)} km da propriedade',
+    );
     if (regional.unknownCropCount > 0) {
       lines.add('- ${regional.unknownCropCount} sem cultura informada');
     }

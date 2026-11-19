@@ -9,6 +9,12 @@ import '../../../../core/theme/app_spacing.dart';
 import '../../../../core/theme/app_text_styles.dart';
 import '../../../../services/auth_service.dart';
 import '../../../occurrence/data/occurrence_repository.dart';
+import '../../../favorability/data/favorability_service.dart';
+import '../../../favorability/data/scientific_rule_repository.dart';
+import '../../../favorability/domain/favorability_engine.dart';
+import '../../../favorability/presentation/favorability_screen.dart';
+import '../../../../services/notification_service.dart';
+import '../../../notifications/domain/intelligent_alert.dart';
 import '../../../property/domain/property_model.dart';
 import '../../../settings/data/settings_repository.dart';
 import '../../../weather/data/weather_repository.dart';
@@ -133,6 +139,41 @@ class _PropertyDashboardScreenState extends State<PropertyDashboardScreen> {
               onRetry: () => _loadWeather(force: true),
             ),
             _buildRegionalSection(),
+            ListTile(
+              leading: const Icon(Icons.science_outlined),
+              title: const Text('Favorabilidade experimental'),
+              subtitle: const Text('Avaliação operacional e modo demonstração'),
+              trailing: const Icon(Icons.chevron_right),
+              onTap: () {
+                final weather = context.read<WeatherRepository>();
+                Navigator.of(context).push(
+                  MaterialPageRoute<void>(
+                    builder: (_) => FavorabilityScreen(
+                      demonstrateNotification: (result) async {
+                        final uid = context
+                            .read<AuthService>()
+                            .currentUser
+                            ?.uid;
+                        final alert = environmentalCandidate(result, _property);
+                        if (uid == null || alert == null || !alert.simulated) {
+                          return 'ignored';
+                        }
+                        return context.read<NotificationService>().showAlert(
+                          uid,
+                          alert,
+                        );
+                      },
+                      loadOperational: () => FavorabilityService(
+                        engine: FavorabilityEngine(),
+                        rules: ScientificRuleRepository(),
+                        loadOccurrencesSince: _occurrenceRepo.getSince,
+                        loadForecast: weather.getForecastForProperty,
+                      ).assessExperimental(_property),
+                    ),
+                  ),
+                );
+              },
+            ),
             const SizedBox(height: AppSpacing.xl),
           ],
         ),

@@ -7,6 +7,8 @@ import '../../../../core/theme/app_text_styles.dart';
 import '../../../../core/theme/app_spacing.dart';
 import '../../../../core/widgets/primary_button.dart';
 import '../../../../services/auth_service.dart';
+import '../../../../services/nearby_alert_service.dart';
+import '../../../favorability/data/environmental_alert_service.dart';
 import '../../data/settings_repository.dart';
 import '../../domain/user_settings_model.dart';
 
@@ -48,6 +50,13 @@ class _NotificationSettingsScreenState
     try {
       await _repo.save(_settings!);
       if (!mounted) return;
+      await context.read<NearbyAlertService>().check(_settings!.userId);
+      if (!mounted) return;
+      await context.read<EnvironmentalAlertService>().run(
+        _settings!.userId,
+        force: true,
+      );
+      if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
           content: Text('Configurações salvas!'),
@@ -88,18 +97,24 @@ class _NotificationSettingsScreenState
               color: AppColors.primaryContainer,
               borderRadius: BorderRadius.circular(AppSpacing.radiusMd),
               border: Border.all(
-                  color: AppColors.primaryLight.withValues(alpha: 0.4)),
+                color: AppColors.primaryLight.withValues(alpha: 0.4),
+              ),
             ),
             child: Row(
               children: [
-                const Icon(Icons.notifications_active_outlined,
-                    color: AppColors.primary, size: 20),
+                const Icon(
+                  Icons.notifications_active_outlined,
+                  color: AppColors.primary,
+                  size: 20,
+                ),
                 const SizedBox(width: AppSpacing.sm),
                 Expanded(
                   child: Text(
-                    'Você receberá alertas quando pragas forem detectadas próximas à sua propriedade.',
-                    style: AppTextStyles.bodySmall
-                        .copyWith(color: AppColors.primaryDark),
+                    'Verificamos ocorrências próximas e favorabilidade experimental ao abrir ou retomar o app e ao acessar os alertas. '
+                    'Requer conexão e propriedade cadastrada. Não há verificação com o app encerrado.',
+                    style: AppTextStyles.bodySmall.copyWith(
+                      color: AppColors.primaryDark,
+                    ),
                   ),
                 ),
               ],
@@ -117,15 +132,20 @@ class _NotificationSettingsScreenState
             ),
             child: SwitchListTile(
               contentPadding: const EdgeInsets.symmetric(
-                  horizontal: AppSpacing.md, vertical: AppSpacing.xs),
-              title: Text('Notificações de pragas',
-                  style: AppTextStyles.titleMedium),
+                horizontal: AppSpacing.md,
+                vertical: AppSpacing.xs,
+              ),
+              title: Text(
+                'Notificações de pragas',
+                style: AppTextStyles.titleMedium,
+              ),
               subtitle: Text(
                 s.notificationsEnabled
                     ? 'Alertas ativos — raio de ${s.alertRadiusKm.toStringAsFixed(0)} km'
                     : 'Alertas desativados',
-                style: AppTextStyles.bodySmall
-                    .copyWith(color: AppColors.textSecondary),
+                style: AppTextStyles.bodySmall.copyWith(
+                  color: AppColors.textSecondary,
+                ),
               ),
               secondary: Container(
                 width: 40,
@@ -147,8 +167,9 @@ class _NotificationSettingsScreenState
                 ),
               ),
               value: s.notificationsEnabled,
-              onChanged: (v) =>
-                  setState(() => _settings = s.copyWith(notificationsEnabled: v)),
+              onChanged: (v) => setState(
+                () => _settings = s.copyWith(notificationsEnabled: v),
+              ),
             ),
           ),
 
@@ -174,16 +195,20 @@ class _NotificationSettingsScreenState
                       Text('Raio de alerta', style: AppTextStyles.titleMedium),
                       Container(
                         padding: const EdgeInsets.symmetric(
-                            horizontal: 12, vertical: 4),
+                          horizontal: 12,
+                          vertical: 4,
+                        ),
                         decoration: BoxDecoration(
                           color: AppColors.primaryContainer,
-                          borderRadius:
-                              BorderRadius.circular(AppSpacing.radiusFull),
+                          borderRadius: BorderRadius.circular(
+                            AppSpacing.radiusFull,
+                          ),
                         ),
                         child: Text(
                           '${s.alertRadiusKm.toStringAsFixed(0)} km',
-                          style: AppTextStyles.labelMedium
-                              .copyWith(color: AppColors.primary),
+                          style: AppTextStyles.labelMedium.copyWith(
+                            color: AppColors.primary,
+                          ),
                         ),
                       ),
                     ],
@@ -191,8 +216,9 @@ class _NotificationSettingsScreenState
                   const SizedBox(height: AppSpacing.xs),
                   Text(
                     'Alertas para pragas detectadas dentro deste raio.',
-                    style: AppTextStyles.bodySmall
-                        .copyWith(color: AppColors.textSecondary),
+                    style: AppTextStyles.bodySmall.copyWith(
+                      color: AppColors.textSecondary,
+                    ),
                   ),
                   Slider(
                     value: s.alertRadiusKm,
@@ -202,18 +228,25 @@ class _NotificationSettingsScreenState
                     label: '${s.alertRadiusKm.toStringAsFixed(0)} km',
                     onChanged: s.notificationsEnabled
                         ? (v) => setState(
-                            () => _settings = s.copyWith(alertRadiusKm: v))
+                            () => _settings = s.copyWith(alertRadiusKm: v),
+                          )
                         : null,
                   ),
                   Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
-                      Text('${AppConstants.alertRadiusMin.toStringAsFixed(0)} km',
-                          style: AppTextStyles.labelSmall
-                              .copyWith(color: AppColors.textHint)),
-                      Text('${AppConstants.alertRadiusMax.toStringAsFixed(0)} km',
-                          style: AppTextStyles.labelSmall
-                              .copyWith(color: AppColors.textHint)),
+                      Text(
+                        '${AppConstants.alertRadiusMin.toStringAsFixed(0)} km',
+                        style: AppTextStyles.labelSmall.copyWith(
+                          color: AppColors.textHint,
+                        ),
+                      ),
+                      Text(
+                        '${AppConstants.alertRadiusMax.toStringAsFixed(0)} km',
+                        style: AppTextStyles.labelSmall.copyWith(
+                          color: AppColors.textHint,
+                        ),
+                      ),
                     ],
                   ),
                 ],

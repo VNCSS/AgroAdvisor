@@ -119,11 +119,17 @@ class DatabaseService {
 
   /// Persiste (ou atualiza) o FCM token do dispositivo do usuário.
   Future<void> saveUserFcmToken(String userId, String token) async {
-    await _db.collection('users').doc(userId).set(
-      {'userId': userId, 'fcmToken': token},
-      SetOptions(merge: true),
-    );
+    await _db.collection('users').doc(userId).set({
+      'userId': userId,
+      'fcmToken': token,
+    }, SetOptions(merge: true));
   }
+
+  /// Remove somente o token da própria conta, antes do logout.
+  Future<void> removeUserFcmToken(String userId) => _db
+      .collection('users')
+      .doc(userId)
+      .update({'fcmToken': FieldValue.delete()});
 
   /// Garante que o documento do usuário tenha os campos de notificação com
   /// valores padrão, sem sobrescrever preferências já salvas.
