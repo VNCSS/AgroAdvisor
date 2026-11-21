@@ -3,6 +3,7 @@ import 'dart:developer' as dev;
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
+import '../../../../core/widgets/alert_screen_widgets.dart';
 import '../../../../core/constants/app_constants.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../../core/theme/app_spacing.dart';
@@ -147,8 +148,8 @@ class _PropertyDashboardScreenState extends State<PropertyDashboardScreen> {
               onTap: () {
                 final weather = context.read<WeatherRepository>();
                 Navigator.of(context).push(
-                  MaterialPageRoute<void>(
-                    builder: (_) => FavorabilityScreen(
+                  alertScreenRoute(
+                    (_) => FavorabilityScreen(
                       demonstrateNotification: (result) async {
                         final uid = context
                             .read<AuthService>()

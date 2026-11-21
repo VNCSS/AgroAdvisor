@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:developer' as dev;
 
@@ -7,15 +8,13 @@ import '../core/constants/app_constants.dart';
 import '../features/occurrence/domain/diagnosis_model.dart';
 import 'ai_service.dart';
 
-/// Implementação do AiService usando Google Gemini 2.5 Flash.
-///
-/// Tier gratuito: 1.500 req/dia — ideal para desenvolvimento e testes.
-/// Para trocar de provedor, altere AppConstants.geminiEndpoint em app_constants.dart.
+/// Implementação do AiService usando os modelos Gemini Flash e Flash-Lite.
 class GeminiAiService implements AiService {
   static const String _apiKey = AppConstants.geminiApiKey;
   static const String _endpoint = AppConstants.geminiEndpoint;
 
-  static const String _systemPrompt = '''Especialista em fitossanidade. Analise a imagem e responda APENAS com JSON, sem texto extra.
+  static const String _systemPrompt =
+      '''Especialista em fitossanidade. Analise a imagem e responda APENAS com JSON, sem texto extra.
 
 Formato obrigatório:
 {"pestName":"<máx 40 chars>","riskLevel":"alto","description":"<máx 120 chars>","recommendation":"<máx 120 chars>","confidenceScore":0.85,"detectedIssues":["<máx 30 chars>"]}
@@ -30,8 +29,6 @@ Regras:
 
   @override
   Future<DiagnosisModel> analyzeImage(String imageBase64) async {
-    dev.log('[GeminiAiService] iniciando análise de imagem');
-
     final uri = Uri.parse('$_endpoint?key=$_apiKey');
     final requestBody = jsonEncode({
       'contents': [
@@ -39,10 +36,7 @@ Regras:
           'parts': [
             {'text': _systemPrompt},
             {
-              'inlineData': {
-                'mimeType': 'image/jpeg',
-                'data': imageBase64,
-              },
+              'inlineData': {'mimeType': 'image/jpeg', 'data': imageBase64},
             },
           ],
         },
@@ -50,36 +44,18 @@ Regras:
       'generationConfig': {
         'maxOutputTokens': 4096,
         'responseMimeType': 'application/json',
-        'thinkingConfig': {
-          'thinkingLevel': 'low',
-        },
+        'thinkingConfig': {'thinkingLevel': 'low'},
       },
     });
 
-    final response = await http
-        .post(
-          uri,
-          headers: {'Content-Type': 'application/json'},
-          body: requestBody,
-        )
-        .timeout(const Duration(seconds: AppConstants.aiTimeoutSeconds));
-
+    final response = await _request(uri, requestBody, allowRetry: true);
     if (response.statusCode == 200) {
-      dev.log('[GeminiAiService] resposta recebida, processando');
       return _parseResponse(response.body);
     }
 
-    // Loga sempre o corpo completo para facilitar diagnóstico
-    dev.log(
-      '[GeminiAiService] erro HTTP ${response.statusCode}\n'
-      'body: ${response.body}',
-    );
-
     if (response.statusCode == 400) {
-      // 400 normalmente significa chave inválida ou payload malformado.
-      // Extrai a mensagem da API para exibir algo útil.
-      final msg = _extractApiError(response.body);
-      throw Exception('Gemini: requisição inválida — $msg');
+      final message = _extractApiError(response.body);
+      throw Exception('Gemini: requisição inválida — $message');
     }
 
     if (response.statusCode == 401 || response.statusCode == 403) {
@@ -90,26 +66,69 @@ Regras:
     }
 
     if (response.statusCode == 429) {
-      final retryDelaySecs = _parseRetryDelay(response.body);
-      dev.log('[GeminiAiService] 429 — retryDelay: ${retryDelaySecs}s');
-
-      if (retryDelaySecs != null && retryDelaySecs <= 60) {
-        dev.log('[GeminiAiService] aguardando ${retryDelaySecs}s (sugerido pela API)');
-        await Future.delayed(Duration(seconds: retryDelaySecs));
-        final retry = await http
-            .post(uri, headers: {'Content-Type': 'application/json'}, body: requestBody)
-            .timeout(const Duration(seconds: AppConstants.aiTimeoutSeconds));
-        if (retry.statusCode == 200) {
-          dev.log('[GeminiAiService] retry bem-sucedido');
-          return _parseResponse(retry.body);
-        }
-        dev.log('[GeminiAiService] retry também falhou — body: ${retry.body}');
-      }
-
       throw const AiRateLimitException();
     }
 
-    throw Exception('Gemini API [${response.statusCode}]: ${_extractApiError(response.body)}');
+    throw Exception(
+      'Gemini API [${response.statusCode}]: ${_extractApiError(response.body)}',
+    );
+  }
+
+  Future<http.Response> _request(
+    Uri uri,
+    String body, {
+    required bool allowRetry,
+  }) async {
+    final http.Response response;
+    final client = http.Client();
+    final elapsed = Stopwatch()..start();
+    final model = uri.pathSegments.last.split(':').first;
+    try {
+      response = await client
+          .post(uri, headers: {'Content-Type': 'application/json'}, body: body)
+          .timeout(
+            Duration(
+              seconds: allowRetry
+                  ? AppConstants.aiPrimaryTimeoutSeconds
+                  : AppConstants.aiTimeoutSeconds,
+            ),
+          );
+    } on TimeoutException {
+      dev.log(
+        '[GeminiAiService] $model: timeout após ${elapsed.elapsedMilliseconds} ms',
+      );
+      if (!allowRetry) throw AiUnavailableException.timeout;
+      return _retryWithFallback(body);
+    } finally {
+      client.close();
+    }
+
+    final status = response.statusCode;
+    dev.log(
+      '[GeminiAiService] $model: HTTP $status em ${elapsed.elapsedMilliseconds} ms',
+    );
+    if (status == 503 || status == 502 || status == 504) {
+      if (!allowRetry) throw AiUnavailableException.serviceUnavailable;
+      return _retryWithFallback(body);
+    }
+    if (status == 429 && allowRetry) {
+      final delay = _parseRetryDelay(response.body);
+      if (delay != null && delay >= 0 && delay <= 60) {
+        return _retry(uri, body, Duration(seconds: delay));
+      }
+    }
+    return response;
+  }
+
+  Future<http.Response> _retryWithFallback(String body) => _retry(
+    Uri.parse('${AppConstants.geminiFallbackEndpoint}?key=$_apiKey'),
+    body,
+    const Duration(seconds: 2),
+  );
+
+  Future<http.Response> _retry(Uri uri, String body, Duration delay) async {
+    await Future<void>.delayed(delay);
+    return _request(uri, body, allowRetry: false);
   }
 
   DiagnosisModel _parseResponse(String responseBody) {
@@ -122,15 +141,17 @@ Regras:
       }
 
       final content = candidates.first['content'] as Map<String, dynamic>?;
-      final parts = (content?['parts'] as List?)
-          ?.cast<Map<String, dynamic>>() ?? [];
+      final parts =
+          (content?['parts'] as List?)?.cast<Map<String, dynamic>>() ?? [];
 
       if (parts.isEmpty) {
         throw const FormatException('Sem partes na resposta');
       }
 
       final rawText = (parts.first['text'] as String? ?? '').trim();
-      dev.log('[GeminiAiService] rawText recebido: ${rawText.length > 300 ? rawText.substring(0, 300) : rawText}');
+      dev.log(
+        '[GeminiAiService] rawText recebido: ${rawText.length > 300 ? rawText.substring(0, 300) : rawText}',
+      );
 
       final cleanJson = rawText
           .replaceAll('```json', '')
@@ -144,20 +165,27 @@ Regras:
         riskLevel: _normalizeRiskLevel(diagnosisMap['riskLevel']),
         description: diagnosisMap['description'] ?? '',
         recommendation: diagnosisMap['recommendation'] ?? '',
-        confidenceScore: (diagnosisMap['confidenceScore'] ?? 0.0).toDouble().clamp(0.0, 1.0),
+        confidenceScore: (diagnosisMap['confidenceScore'] ?? 0.0)
+            .toDouble()
+            .clamp(0.0, 1.0),
         detectedIssues: List<String>.from(diagnosisMap['detectedIssues'] ?? []),
         analyzedAt: DateTime.now(),
       );
 
-      dev.log('[GeminiAiService] diagnóstico: ${result.pestName} (${(result.confidenceScore * 100).toStringAsFixed(0)}%)');
+      dev.log(
+        '[GeminiAiService] diagnóstico: ${result.pestName} (${(result.confidenceScore * 100).toStringAsFixed(0)}%)',
+      );
       return result;
     } catch (e) {
-      dev.log('[GeminiAiService] erro no parse: $e — retornando diagnóstico de fallback');
+      dev.log(
+        '[GeminiAiService] erro no parse: $e — retornando diagnóstico de fallback',
+      );
       return DiagnosisModel(
         pestName: 'Análise inconclusiva',
         riskLevel: 'desconhecido',
         description: 'Não foi possível processar o resultado da análise de IA.',
-        recommendation: 'Consulte um engenheiro agrônomo para avaliação presencial.',
+        recommendation:
+            'Consulte um engenheiro agrônomo para avaliação presencial.',
         confidenceScore: 0.0,
         detectedIssues: const [],
         analyzedAt: DateTime.now(),

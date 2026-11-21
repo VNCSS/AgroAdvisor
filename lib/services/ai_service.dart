@@ -18,3 +18,16 @@ class AiRateLimitException implements Exception {
   String toString() =>
       'Limite de requisições da IA atingido. Aguarde alguns minutos e tente novamente.';
 }
+
+enum AiUnavailableException implements Exception {
+  timeout(
+    'A análise demorou mais que o esperado. Tente novamente em instantes.',
+  ),
+  serviceUnavailable(
+    'A IA está temporariamente indisponível. Tente novamente em instantes.',
+  );
+
+  const AiUnavailableException(this.message);
+
+  final String message;
+}

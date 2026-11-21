@@ -52,3 +52,6 @@ functions/.env.*
 
 # Claude Code (ferramenta de desenvolvimento local)
 .claude/
+
+# Local Gemini configuration
+/gemini.local.json

@@ -618,7 +618,13 @@ void main() {
       await tester.tap(find.text('Simular ocorrência'));
       await tester.pumpAndSettle();
       expect(shown.single.simulated, isTrue);
-      await tester.tap(find.text('Abrir detalhes demonstrativos'));
+      final details = find.text('Abrir detalhes demonstrativos');
+      await tester.scrollUntilVisible(
+        details.hitTestable(),
+        150,
+        scrollable: find.byType(Scrollable).first,
+      );
+      await tester.tap(details);
       await tester.pumpAndSettle();
       expect(find.text('MODO DEMONSTRAÇÃO — DADOS SIMULADOS'), findsOneWidget);
       expect(find.textContaining('Área monitorada:'), findsOneWidget);
@@ -651,14 +657,14 @@ void main() {
       await tester.tap(find.text('Alto').last);
       await tester.pumpAndSettle();
       await tester.scrollUntilVisible(
-        find.text('Executar avaliação'),
+        find.text('Executar avaliação').hitTestable(),
         200,
         scrollable: find.byType(Scrollable).first,
       );
       await tester.tap(find.text('Executar avaliação'));
       await tester.pumpAndSettle();
       await tester.scrollUntilVisible(
-        find.text('Gerar notificação local demonstrativa'),
+        find.text('Gerar notificação local demonstrativa').hitTestable(),
         300,
         scrollable: find.byType(Scrollable).first,
       );

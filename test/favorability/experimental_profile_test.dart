@@ -281,7 +281,7 @@ void main() {
       await tester.pumpAndSettle();
       await tester.enterText(find.byType(TextField).first, '26');
       await tester.scrollUntilVisible(
-        find.text('Executar avaliação'),
+        find.text('Executar avaliação').hitTestable(),
         200,
         scrollable: find.byType(Scrollable).first,
       );
@@ -289,7 +289,7 @@ void main() {
       await tester.pumpAndSettle();
       expect(loads, 0);
       await tester.scrollUntilVisible(
-        find.text('Resultado simulado e experimental'),
+        find.text('Resultado simulado e experimental').hitTestable(),
         200,
         scrollable: find.byType(Scrollable).first,
       );

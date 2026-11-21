@@ -5,6 +5,7 @@ import '../../../../core/theme/app_colors.dart';
 import '../../../../core/theme/app_text_styles.dart';
 import '../../../../core/theme/app_spacing.dart';
 import '../../../../core/utils/date_formatter.dart';
+import '../../../../core/widgets/alert_screen_widgets.dart';
 import '../../../../services/auth_service.dart';
 import '../../../../services/database_service.dart';
 import '../../../../services/nearby_alert_service.dart';
@@ -64,8 +65,8 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
       if (!mounted) return;
       final notifications = context.read<NotificationService>();
       Navigator.of(context).push(
-        MaterialPageRoute<void>(
-          builder: (_) => NearbyDemoScreen(
+        alertScreenRoute(
+          (_) => NearbyDemoScreen(
             radiusKm: settings.alertRadiusKm,
             enabled: settings.notificationsEnabled,
             showLocal: (alert) => notifications.showAlert(uid, alert),
@@ -99,98 +100,132 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
         title: const Text('Notificações'),
         actions: [
           IconButton(
-            tooltip: 'Demonstrar ocorrência próxima',
-            onPressed: _demo,
-            icon: const Icon(Icons.science_outlined),
-          ),
-          IconButton(
-            tooltip: 'Verificar alertas agora',
-            onPressed: _checking ? null : () => _check(force: true),
-            icon: const Icon(Icons.refresh),
-          ),
-          TextButton(
+            tooltip: 'Marcar todas como lidas',
             onPressed: () => _markAllRead(userId),
-            child: Text(
-              'Marcar todas',
-              style: AppTextStyles.labelMedium.copyWith(
-                color: AppColors.onPrimary,
-              ),
-            ),
+            icon: const Icon(Icons.done_all_rounded),
           ),
         ],
       ),
-      body: StreamBuilder<List<AppNotificationModel>>(
-        stream: _repo.watchForUser(userId),
-        builder: (context, snapshot) {
-          if (snapshot.hasError) {
-            return Center(
-              child: Text(
-                'Erro ao carregar notificações:\n${snapshot.error}',
-                style: AppTextStyles.bodySmall.copyWith(color: AppColors.error),
-                textAlign: TextAlign.center,
-              ),
-            );
-          }
-
-          if (snapshot.connectionState == ConnectionState.waiting) {
-            return const Center(child: CircularProgressIndicator());
-          }
-
-          final items = snapshot.data ?? [];
-
-          if (items.isEmpty) {
-            return Center(
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Icon(
-                    Icons.notifications_none_rounded,
-                    size: 56,
-                    color: AppColors.textHint,
-                  ),
-                  const SizedBox(height: AppSpacing.md),
-                  Text(
-                    'Nenhuma notificação ainda',
-                    style: AppTextStyles.titleSmall.copyWith(
-                      color: AppColors.textSecondary,
+      body: SafeArea(
+        top: false,
+        child: StreamBuilder<List<AppNotificationModel>>(
+          stream: _repo.watchForUser(userId),
+          builder: (context, snapshot) {
+            final items = snapshot.data ?? [];
+            return CustomScrollView(
+              slivers: [
+                SliverPadding(
+                  padding: alertScreenPadding.copyWith(bottom: AppSpacing.sm),
+                  sliver: SliverToBoxAdapter(
+                    child: AlertSection(
+                      children: [
+                        ListTile(
+                          contentPadding: EdgeInsets.zero,
+                          leading: const Icon(
+                            Icons.science_outlined,
+                            color: AppColors.primary,
+                          ),
+                          title: const Text('Demonstrar ocorrência próxima'),
+                          trailing: const Icon(Icons.chevron_right),
+                          onTap: _demo,
+                        ),
+                        const Divider(),
+                        ListTile(
+                          contentPadding: EdgeInsets.zero,
+                          leading: _checking
+                              ? const SizedBox.square(
+                                  dimension: 24,
+                                  child: CircularProgressIndicator(
+                                    strokeWidth: 2,
+                                  ),
+                                )
+                              : const Icon(
+                                  Icons.refresh_rounded,
+                                  color: AppColors.primary,
+                                ),
+                          title: Text(
+                            _checking
+                                ? 'Verificando alertas…'
+                                : 'Verificar alertas agora',
+                          ),
+                          onTap: _checking ? null : () => _check(force: true),
+                        ),
+                      ],
                     ),
                   ),
-                  const SizedBox(height: AppSpacing.sm),
-                  Text(
-                    'A verificação ocorre ao abrir ou retomar o app\ne ao acessar os alertas. Requer conexão.',
-                    style: AppTextStyles.bodySmall.copyWith(
-                      color: AppColors.textHint,
-                    ),
-                    textAlign: TextAlign.center,
-                  ),
-                ],
-              ),
+                ),
+                SliverPadding(
+                  padding: alertScreenPadding.copyWith(top: AppSpacing.sm),
+                  sliver:
+                      snapshot.hasError ||
+                          snapshot.connectionState == ConnectionState.waiting ||
+                          items.isEmpty
+                      ? SliverToBoxAdapter(child: _historyStatus(snapshot))
+                      : SliverList.separated(
+                          itemCount: items.length,
+                          separatorBuilder: (_, _) =>
+                              const SizedBox(height: AppSpacing.sm),
+                          itemBuilder: (_, i) {
+                            final notification = items[i];
+                            return _NotifCard(
+                              notif: notification,
+                              onTap: () async {
+                                await _repo.markRead(userId, notification.id);
+                                if (!context.mounted) return;
+                                Navigator.of(context).push(
+                                  alertScreenRoute(
+                                    (_) => NotificationDetailScreen(
+                                      notification: notification,
+                                    ),
+                                  ),
+                                );
+                              },
+                            );
+                          },
+                        ),
+                ),
+              ],
             );
-          }
-
-          return ListView.separated(
-            padding: const EdgeInsets.symmetric(
-              horizontal: AppSpacing.screenH,
-              vertical: AppSpacing.md,
-            ),
-            itemCount: items.length,
-            separatorBuilder: (_, _) => const SizedBox(height: AppSpacing.sm),
-            itemBuilder: (_, i) => _NotifCard(
-              notif: items[i],
-              onTap: () async {
-                await _repo.markRead(userId, items[i].id);
-                if (!context.mounted) return;
-                Navigator.of(context).push(
-                  MaterialPageRoute<void>(
-                    builder: (_) =>
-                        NotificationDetailScreen(notification: items[i]),
-                  ),
-                );
-              },
-            ),
-          );
-        },
+          },
+        ),
       ),
+    );
+  }
+
+  Widget _historyStatus(AsyncSnapshot<List<AppNotificationModel>> snapshot) {
+    if (snapshot.hasError) {
+      return AlertSection(
+        children: [
+          Text(
+            'Erro ao carregar notificações:\n${snapshot.error}',
+            style: AppTextStyles.bodySmall.copyWith(color: AppColors.error),
+          ),
+        ],
+      );
+    }
+    if (snapshot.connectionState == ConnectionState.waiting) {
+      return const Center(child: CircularProgressIndicator());
+    }
+    return AlertSection(
+      children: [
+        const CircleAvatar(
+          backgroundColor: AppColors.primaryContainer,
+          foregroundColor: AppColors.primary,
+          child: Icon(Icons.notifications_none_rounded),
+        ),
+        Text(
+          'Nenhuma notificação ainda',
+          style: AppTextStyles.titleSmall,
+          textAlign: TextAlign.center,
+        ),
+        Text(
+          'A verificação ocorre ao abrir ou retomar o app e ao acessar os alertas. Requer conexão.',
+          style: AppTextStyles.bodySmall.copyWith(
+            color: AppColors.textSecondary,
+          ),
+          textAlign: TextAlign.center,
+        ),
+      ],
     );
   }
 }
@@ -207,102 +242,105 @@ class _NotifCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final unread = !notif.read;
 
-    return GestureDetector(
-      onTap: onTap,
-      child: Container(
-        padding: const EdgeInsets.all(AppSpacing.md),
-        decoration: BoxDecoration(
-          color: unread ? AppColors.riskHighContainer : AppColors.surface,
-          borderRadius: BorderRadius.circular(AppSpacing.radiusMd),
-          border: Border.all(
-            color: unread
-                ? AppColors.riskHigh.withValues(alpha: 0.3)
-                : AppColors.border,
-            width: 0.8,
-          ),
+    return Card(
+      color: unread ? AppColors.riskHighContainer : AppColors.surface,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(AppSpacing.radiusMd),
+        side: BorderSide(
+          color: unread
+              ? AppColors.riskHigh.withValues(alpha: 0.3)
+              : AppColors.border,
+          width: 0.8,
         ),
-        child: Row(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            // Ícone
-            Container(
-              width: 40,
-              height: 40,
-              decoration: BoxDecoration(
-                color: unread
-                    ? AppColors.riskHigh.withValues(alpha: 0.15)
-                    : AppColors.surfaceVariant,
-                borderRadius: BorderRadius.circular(AppSpacing.radiusSm),
+      ),
+      clipBehavior: Clip.antiAlias,
+      child: InkWell(
+        onTap: onTap,
+        child: Padding(
+          padding: const EdgeInsets.all(AppSpacing.md),
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              // Ícone
+              Container(
+                width: 40,
+                height: 40,
+                decoration: BoxDecoration(
+                  color: unread
+                      ? AppColors.riskHigh.withValues(alpha: 0.15)
+                      : AppColors.surfaceVariant,
+                  borderRadius: BorderRadius.circular(AppSpacing.radiusSm),
+                ),
+                child: Icon(
+                  // Alertas preventivos (favorabilidade) têm ícone próprio;
+                  // os de proximidade mantêm o ícone original.
+                  notif.isPreventive
+                      ? Icons.thermostat_rounded
+                      : Icons.pest_control_rounded,
+                  color: unread ? AppColors.riskHigh : AppColors.textHint,
+                  size: 22,
+                ),
               ),
-              child: Icon(
-                // Alertas preventivos (favorabilidade) têm ícone próprio;
-                // os de proximidade mantêm o ícone original.
-                notif.isPreventive
-                    ? Icons.thermostat_rounded
-                    : Icons.pest_control_rounded,
-                color: unread ? AppColors.riskHigh : AppColors.textHint,
-                size: 22,
-              ),
-            ),
-            const SizedBox(width: AppSpacing.md),
+              const SizedBox(width: AppSpacing.md),
 
-            // Conteúdo
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Expanded(
-                        child: Text(
-                          notif.title,
-                          style: AppTextStyles.titleSmall.copyWith(
-                            color: AppColors.textPrimary,
-                            fontWeight: unread
-                                ? FontWeight.w700
-                                : FontWeight.w500,
+              // Conteúdo
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Expanded(
+                          child: Text(
+                            notif.title,
+                            style: AppTextStyles.titleSmall.copyWith(
+                              color: AppColors.textPrimary,
+                              fontWeight: unread
+                                  ? FontWeight.w700
+                                  : FontWeight.w500,
+                            ),
                           ),
                         ),
-                      ),
-                      if (unread) ...[
-                        const SizedBox(width: AppSpacing.sm),
-                        Container(
-                          width: 8,
-                          height: 8,
-                          decoration: const BoxDecoration(
-                            color: AppColors.riskHigh,
-                            shape: BoxShape.circle,
+                        if (unread) ...[
+                          const SizedBox(width: AppSpacing.sm),
+                          Container(
+                            width: 8,
+                            height: 8,
+                            decoration: const BoxDecoration(
+                              color: AppColors.riskHigh,
+                              shape: BoxShape.circle,
+                            ),
                           ),
-                        ),
+                        ],
                       ],
-                    ],
-                  ),
-                  const SizedBox(height: 3),
-                  Text(
-                    notif.body,
-                    maxLines: 3,
-                    overflow: TextOverflow.ellipsis,
-                    style: AppTextStyles.bodySmall.copyWith(
-                      color: AppColors.textSecondary,
                     ),
-                  ),
-                  const SizedBox(height: AppSpacing.xs),
-                  Text(
-                    '${notif.simulated ? 'DEMONSTRAÇÃO · ' : ''}${notif.isPreventive ? 'Favorabilidade experimental' : 'Ocorrência próxima'}'
-                    '${notif.region == null ? '' : ' · ${notif.region}'}',
-                    style: AppTextStyles.caption,
-                  ),
-                  Text(
-                    DateFormatter.format(notif.receivedAt),
-                    style: AppTextStyles.caption.copyWith(
-                      color: AppColors.textHint,
+                    const SizedBox(height: 3),
+                    Text(
+                      notif.body,
+                      maxLines: 3,
+                      overflow: TextOverflow.ellipsis,
+                      style: AppTextStyles.bodySmall.copyWith(
+                        color: AppColors.textSecondary,
+                      ),
                     ),
-                  ),
-                ],
+                    const SizedBox(height: AppSpacing.xs),
+                    Text(
+                      '${notif.simulated ? 'DEMONSTRAÇÃO · ' : ''}${notif.isPreventive ? 'Favorabilidade experimental' : 'Ocorrência próxima'}'
+                      '${notif.region == null ? '' : ' · ${notif.region}'}',
+                      style: AppTextStyles.caption,
+                    ),
+                    Text(
+                      DateFormatter.format(notif.receivedAt),
+                      style: AppTextStyles.caption.copyWith(
+                        color: AppColors.textHint,
+                      ),
+                    ),
+                  ],
+                ),
               ),
-            ),
-          ],
+            ],
+          ),
         ),
       ),
     );

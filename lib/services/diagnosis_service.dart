@@ -4,7 +4,6 @@ import '../features/occurrence/domain/diagnosis_model.dart';
 import 'ai_service.dart';
 import 'database_service.dart';
 
-
 /// Orquestra a análise de IA e a persistência do diagnóstico no Firestore.
 ///
 /// Depende de AiService (injetado) — fácil de testar com um mock.
@@ -15,8 +14,8 @@ class DiagnosisService {
   const DiagnosisService({
     required AiService aiService,
     required DatabaseService db,
-  })  : _aiService = aiService,
-        _db = db;
+  }) : _aiService = aiService,
+       _db = db;
 
   /// Analisa a imagem via IA e persiste o diagnóstico na ocorrência.
   ///
@@ -47,8 +46,16 @@ class DiagnosisService {
       dev.log('[DiagnosisService] limite de requisições da API atingido');
       onError?.call(e.toString());
       return null;
+    } on AiUnavailableException catch (e) {
+      dev.log('[DiagnosisService] IA indisponível: ${e.name}');
+      onError?.call(e.message);
+      return null;
     } catch (e, stack) {
-      dev.log('[DiagnosisService] erro na análise', error: e, stackTrace: stack);
+      dev.log(
+        '[DiagnosisService] erro na análise',
+        error: e,
+        stackTrace: stack,
+      );
       onError?.call('Falha na análise: ${e.toString()}');
       return null;
     }

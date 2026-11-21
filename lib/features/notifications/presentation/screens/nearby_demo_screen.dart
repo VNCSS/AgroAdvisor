@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+import '../../../../core/theme/app_spacing.dart';
+import '../../../../core/widgets/alert_screen_widgets.dart';
 import '../../domain/intelligent_alert.dart';
 import '../../domain/app_notification_model.dart';
 import 'notification_detail_screen.dart';
@@ -72,95 +74,149 @@ class _NearbyDemoScreenState extends State<NearbyDemoScreen> {
     }
     if (mounted) {
       setState(() {
-        _status = 'Apresentação local: $status';
+        _status = localAlertStatusLabel(status);
         _busy = false;
       });
     }
   }
 
   @override
-  Widget build(BuildContext context) => Scaffold(
-    appBar: AppBar(title: const Text('Demonstrar ocorrência próxima')),
-    body: Column(
-      children: [
-        Container(
-          width: double.infinity,
-          color: Colors.amber,
-          padding: const EdgeInsets.all(12),
-          child: const Text(
-            'MODO DEMONSTRAÇÃO — DADOS SIMULADOS',
-            style: TextStyle(color: Colors.black),
-          ),
-        ),
-        Expanded(
-          child: ListView(
-            padding: const EdgeInsets.all(16),
-            children: [
-              Text(
-                'Raio configurado do usuário: ${widget.radiusKm.toStringAsFixed(1)} km',
-              ),
-              DropdownButton<String>(
-                value: _pest,
-                isExpanded: true,
-                items: [
-                  for (final name in [
-                    'Ocorrência fictícia A',
-                    'Ocorrência fictícia B',
-                  ])
-                    DropdownMenuItem(value: name, child: Text(name)),
-                ],
-                onChanged: (v) {
-                  if (v != null) {
-                    setState(() {
-                      _pest = v;
-                      _alert = null;
-                      _status = null;
-                    });
-                  }
-                },
-              ),
-              TextField(
-                controller: _distance,
-                decoration: const InputDecoration(
-                  labelText: 'Distância simulada (km)',
-                ),
-                keyboardType: const TextInputType.numberWithOptions(
-                  decimal: true,
-                ),
-                onChanged: (_) => setState(() {
-                  _alert = null;
-                  _status = null;
-                }),
-              ),
-              FilledButton(
-                onPressed: _busy ? null : _simulate,
-                child: const Text('Simular ocorrência'),
-              ),
-              if (_status != null) Text(_status!),
-              if (_alert case final alert?) ...[
-                Text(alert.title),
-                Text(alert.body),
-                OutlinedButton(
-                  onPressed: () => Navigator.of(context).push(
-                    MaterialPageRoute<void>(
-                      builder: (_) => NotificationDetailScreen(
-                        notification: AppNotificationModel.fromMap(
-                          alert.toMap(),
-                          alert.historyId,
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final alert = _alert;
+    return Scaffold(
+      appBar: AppBar(title: const Text('Ocorrência próxima')),
+      body: SafeArea(
+        top: false,
+        child: Column(
+          children: [
+            const AlertDemoBanner(),
+            Expanded(
+              child: ListView(
+                padding: alertScreenPadding,
+                children: [
+                  AlertSection(
+                    children: [
+                      Text(
+                        'Simular ocorrência próxima',
+                        style: theme.textTheme.titleMedium,
+                      ),
+                      Text(
+                        'Raio configurado: ${widget.radiusKm.toStringAsFixed(1)} km',
+                        style: theme.textTheme.bodySmall,
+                      ),
+                      const SizedBox(height: AppSpacing.xs),
+                      DropdownButtonFormField<String>(
+                        initialValue: _pest,
+                        isExpanded: true,
+                        decoration: const InputDecoration(
+                          labelText: 'Ocorrência',
+                        ),
+                        items: [
+                          for (final name in [
+                            'Ocorrência fictícia A',
+                            'Ocorrência fictícia B',
+                          ])
+                            DropdownMenuItem(value: name, child: Text(name)),
+                        ],
+                        onChanged: (value) {
+                          if (value == null) return;
+                          setState(() {
+                            _pest = value;
+                            _alert = null;
+                            _status = null;
+                          });
+                        },
+                      ),
+                      const SizedBox(height: AppSpacing.xs),
+                      TextField(
+                        controller: _distance,
+                        decoration: const InputDecoration(
+                          labelText: 'Distância simulada (km)',
+                        ),
+                        keyboardType: const TextInputType.numberWithOptions(
+                          decimal: true,
+                        ),
+                        onChanged: (_) => setState(() {
+                          _alert = null;
+                          _status = null;
+                        }),
+                      ),
+                      const SizedBox(height: AppSpacing.xs),
+                      FilledButton.icon(
+                        onPressed: _busy ? null : _simulate,
+                        icon: _busy
+                            ? const SizedBox.square(
+                                dimension: 18,
+                                child: CircularProgressIndicator(
+                                  strokeWidth: 2,
+                                ),
+                              )
+                            : const Icon(Icons.play_arrow_rounded),
+                        label: Text(
+                          _busy ? 'Simulando…' : 'Simular ocorrência',
                         ),
                       ),
-                    ),
+                    ],
                   ),
-                  child: const Text('Abrir detalhes demonstrativos'),
-                ),
-              ],
-              const Text(
-                'A simulação não grava ocorrências nem histórico real e não envia push a outros usuários.',
+                  AnimatedSize(
+                    duration: MediaQuery.disableAnimationsOf(context)
+                        ? Duration.zero
+                        : const Duration(milliseconds: 220),
+                    alignment: Alignment.topCenter,
+                    child: _status == null && alert == null
+                        ? const SizedBox.shrink()
+                        : Padding(
+                            padding: const EdgeInsets.only(top: AppSpacing.md),
+                            child: AlertSection(
+                              children: [
+                                if (_status != null)
+                                  Semantics(
+                                    liveRegion: true,
+                                    child: Text(
+                                      _status!,
+                                      style: theme.textTheme.titleSmall,
+                                    ),
+                                  ),
+                                if (alert != null) ...[
+                                  Text(
+                                    alert.title,
+                                    style: theme.textTheme.titleMedium,
+                                  ),
+                                  Text(alert.body),
+                                  OutlinedButton(
+                                    onPressed: () => Navigator.of(context).push(
+                                      alertScreenRoute(
+                                        (_) => NotificationDetailScreen(
+                                          notification:
+                                              AppNotificationModel.fromMap(
+                                                alert.toMap(),
+                                                alert.historyId,
+                                              ),
+                                        ),
+                                      ),
+                                    ),
+                                    child: const Text(
+                                      'Abrir detalhes demonstrativos',
+                                      textAlign: TextAlign.center,
+                                    ),
+                                  ),
+                                ],
+                              ],
+                            ),
+                          ),
+                  ),
+                  const SizedBox(height: AppSpacing.md),
+                  Text(
+                    'A simulação não grava ocorrências nem histórico real e não envia push a outros usuários.',
+                    style: theme.textTheme.bodySmall,
+                  ),
+                ],
               ),
-            ],
-          ),
+            ),
+          ],
         ),
-      ],
-    ),
-  );
+      ),
+    );
+  }
 }

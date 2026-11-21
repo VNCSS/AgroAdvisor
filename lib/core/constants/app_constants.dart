@@ -46,13 +46,8 @@ class AppConstants {
 
   /// Chave de API do Google Gemini (AI Studio).
   ///
-  /// ⚠️  SEGURANÇA: Em produção, passe via --dart-define=GEMINI_API_KEY=AIza...
-  /// para que a chave nunca seja embutida no binário. Exemplos:
-  ///   flutter run --dart-define=GEMINI_API_KEY=AIza...
-  ///   flutter build apk --dart-define=GEMINI_API_KEY=AIza...
-  ///
-  /// Obtenha sua chave gratuita em: https://aistudio.google.com/apikey
-  /// Tier gratuito: 1.500 requisições/dia — suficiente para desenvolvimento.
+  /// Desenvolvimento local: use --dart-define-from-file=gemini.local.json.
+  /// O arquivo fica fora do Git. A chave ainda integra o binário compilado.
   static const String geminiApiKey = String.fromEnvironment(
     'GEMINI_API_KEY',
     defaultValue: '',
@@ -64,9 +59,12 @@ class AppConstants {
   /// que usa header 'x-api-key').
   static const String geminiEndpoint =
       'https://generativelanguage.googleapis.com/v1beta/models/gemini-3.8-flash:generateContent';
+  static const String geminiFallbackEndpoint =
+      'https://generativelanguage.googleapis.com/v1beta/models/gemini-3.5-flash-lite:generateContent';
 
   /// Timeout para chamadas à API de IA (segundos).
-  static const int aiTimeoutSeconds = 30;
+  static const int aiTimeoutSeconds = 45;
+  static const int aiPrimaryTimeoutSeconds = 20;
 
   // ─── Clima / Open-Meteo ──────────────────────────────────────────────────────
 
